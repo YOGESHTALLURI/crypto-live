@@ -1,0 +1,264 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Live Crypto — Top20 with Sparklines & 1m Δ%</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 18px; }
+    h1 { margin-bottom: 6px; }
+    #status { margin-bottom: 14px; }
+    .grid { max-width: 1100px; }
+    .row {
+      display:grid;
+      grid-template-columns: 180px 140px 140px 1fr 110px;
+      gap:12px;
+      align-items:center;
+      padding:10px 12px;
+      border:1px solid #e6e6e6;
+      border-radius:6px;
+      margin-bottom:8px;
+    }
+    .symbol { font-weight:700; font-size:14px; }
+    .price { font-family: monospace; font-size:14px; text-align:left; }
+    .pct { font-weight:600; text-align:left; }
+    .ts { color:#666; font-size:12px; text-align:left; }
+    .spark { display:block; width:100%; height:36px; }
+    .status-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; vertical-align:middle; }
+    .legend { color:#666; font-size:13px; margin-bottom:8px; }
+    @media(max-width:800px){
+      .row { grid-template-columns: 1fr 100px 100px; grid-auto-rows: auto; }
+      .ts, .pct { display:none; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Live Crypto — Top 20 (with Sparklines & 1m %)</h1>
+  <div id="status">Status: <span id="conn"><span class="status-dot" style="background:orange"></span>Connecting...</span></div>
+  <div class="legend">Price flashes green/red on change • 1m Δ% based on last 60s sample • Sparklines show recent ticks</div>
+
+  <div class="grid" id="grid"></div>
+
+  <script>
+    // TOP_SYMBOLS must match server's list
+    const TOP_SYMBOLS = [
+      "btcusdt","ethusdt","bnbusdt","xrpusdt","adausdt",
+      "solusdt","dogeusdt","dotusdt","maticusdt","ltcusdt",
+      "trxusdt","bchusdt","linkusdt","uniusdt","shibusdt",
+      "avaxusdt","apeusdt","axsusdt","atomusdt","sandusdt"
+    ];
+
+    const grid = document.getElementById('grid');
+
+    // Per-symbol state: { priceEl, pctEl, tsEl, canvas, history: [{ts,price}], lastPrice }
+    const state = {};
+
+    TOP_SYMBOLS.forEach(sym => {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `
+        <div class="symbol">${sym.toUpperCase()}</div>
+        <div class="price">—</div>
+        <div class="pct">—</div>
+        <div><canvas class="spark" width="300" height="36"></canvas></div>
+        <div class="ts">—</div>
+      `;
+      grid.appendChild(row);
+
+      const priceEl = row.querySelector('.price');
+      const pctEl = row.querySelector('.pct');
+      const tsEl = row.querySelector('.ts');
+      const canvas = row.querySelector('canvas');
+
+      state[sym] = {
+        priceEl, pctEl, tsEl, canvas,
+        history: [], lastPrice: null,
+        flashTimeout: null
+      };
+
+      // initial vanilla canvas background
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#f8f8f8';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    });
+
+    const connSpan = document.getElementById('conn');
+    function setStatus(text, color) {
+      connSpan.innerHTML = `<span class="status-dot" style="background:${color}"></span>${text}`;
+    }
+
+    let ws;
+    let reconnectDelay = 1000;
+
+    function createWS() {
+      const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+      ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        setStatus('Connected', 'green');
+        reconnectDelay = 1000;
+      };
+
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === 'snapshot') {
+            const snap = msg.data || {};
+            for (const s of Object.keys(snap)) {
+              const entry = snap[s];
+              if (entry && state[s]) {
+                applyTick(s, entry.price, entry.ts);
+              }
+            }
+            return;
+          }
+          if (msg.type === 'price') {
+            const sym = msg.symbol;
+            const p = msg.data.price;
+            const ts = msg.data.ts;
+            if (state[sym]) applyTick(sym, p, ts);
+          }
+        } catch (e) {
+          console.error('Invalid WS message', e, evt.data);
+        }
+      };
+
+      ws.onclose = () => {
+        setStatus('Disconnected — reconnecting...', 'orange');
+        scheduleReconnect();
+      };
+      ws.onerror = (e) => {
+        console.error('WS error', e);
+      };
+    }
+
+    function scheduleReconnect() {
+      if (ws && ws.readyState === WebSocket.OPEN) return;
+      setTimeout(() => {
+        reconnectDelay = Math.min(reconnectDelay * 1.5, 30000);
+        createWS();
+      }, reconnectDelay);
+    }
+
+    // push a new tick into history, compute 1m delta, redraw sparkline
+    function applyTick(sym, priceStr, ts) {
+      const st = state[sym];
+      if (!st) return;
+      const price = Number(priceStr);
+      const now = (typeof ts === 'number') ? ts : Date.now();
+
+      // Keep history to last 65 seconds (safety)
+      st.history.push({ ts: now, price });
+      const cutoff = now - 60_000;
+      while (st.history.length && st.history[0].ts < cutoff) st.history.shift();
+
+      // update price text with flash color
+      const prev = st.lastPrice;
+      st.lastPrice = price;
+      st.priceEl.textContent = price.toFixed(8).replace(/\.?0+$/,''); // trim trailing zeros
+
+      if (prev != null) {
+        if (price > prev) flash(st.priceEl, '#e6fff0', '#007a2f'); // greenish
+        else if (price < prev) flash(st.priceEl, '#fff0f0', '#b30000'); // redish
+      }
+
+      // compute 1m percent change using oldest sample in history (if exists)
+      if (st.history.length >= 2) {
+        const oldest = st.history[0].price;
+        if (oldest && oldest > 0) {
+          const pct = ((price - oldest) / oldest) * 100;
+          st.pctEl.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+          st.pctEl.style.color = (pct >= 0 ? '#0a7a2b' : '#b30000');
+        } else {
+          st.pctEl.textContent = '—';
+          st.pctEl.style.color = '#333';
+        }
+      } else {
+        st.pctEl.textContent = '—';
+        st.pctEl.style.color = '#333';
+      }
+
+      st.tsEl.textContent = new Date(now).toLocaleTimeString();
+
+      // redraw sparkline
+      drawSparkline(st.canvas, st.history);
+    }
+
+    function flash(elem, bgColor, textColor) {
+      // apply a quick style flash
+      const oldBg = elem.style.backgroundColor;
+      const oldColor = elem.style.color;
+      elem.style.backgroundColor = bgColor;
+      elem.style.color = textColor;
+      if (elem.flashTimeout) clearTimeout(elem.flashTimeout);
+      elem.flashTimeout = setTimeout(() => {
+        elem.style.backgroundColor = oldBg || '';
+        elem.style.color = oldColor || '';
+      }, 300);
+    }
+
+    function drawSparkline(canvas, history) {
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0,0,w,h);
+
+      if (!history || history.length < 2) {
+        // light placeholder
+        ctx.fillStyle = '#fafafa';
+        ctx.fillRect(0,0,w,h);
+        return;
+      }
+
+      // map history timestamps to x positions (relative to last 60s)
+      const now = history[history.length-1].ts;
+      const start = now - 60_000; // 60s window
+      // find min/max price for scaling (use small padding)
+      let minP = Infinity, maxP = -Infinity;
+      for (const p of history) { if (p.price < minP) minP = p.price; if (p.price > maxP) maxP = p.price; }
+      if (minP === maxP) { minP = minP * 0.9999; maxP = maxP * 1.0001; }
+      const pad = (maxP - minP) * 0.05;
+      minP -= pad; maxP += pad;
+
+      // prepare points
+      const pts = history.map(pt => {
+        const x = ((pt.ts - start) / 60000) * w; // from 0..w
+        const y = h - ((pt.price - minP) / (maxP - minP) * h);
+        return {x, y};
+      });
+
+      // draw background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0,0,w,h);
+
+      // draw area under curve (subtle)
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, h);
+      for (const p of pts) ctx.lineTo(p.x, p.y);
+      ctx.lineTo(pts[pts.length-1].x, h);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(0,122,47,0.06)';
+      ctx.fill();
+
+      // draw line
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i=1;i<pts.length;i++){
+        ctx.lineTo(pts[i].x, pts[i].y);
+      }
+      ctx.strokeStyle = '#007a2f';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+
+      // draw last dot
+      const last = pts[pts.length-1];
+      ctx.beginPath();
+      ctx.arc(last.x, last.y, 2.6, 0, Math.PI*2);
+      ctx.fillStyle = '#007a2f';
+      ctx.fill();
+    }
+
+    // start WS
+    createWS();
+  </script>
+</body>
+</html>
