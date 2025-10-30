@@ -1,264 +1,574 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Live Crypto — Top20 with Sparklines & 1m Δ%</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 18px; }
-    h1 { margin-bottom: 6px; }
-    #status { margin-bottom: 14px; }
-    .grid { max-width: 1100px; }
-    .row {
-      display:grid;
-      grid-template-columns: 180px 140px 140px 1fr 110px;
-      gap:12px;
-      align-items:center;
-      padding:10px 12px;
-      border:1px solid #e6e6e6;
-      border-radius:6px;
-      margin-bottom:8px;
-    }
-    .symbol { font-weight:700; font-size:14px; }
-    .price { font-family: monospace; font-size:14px; text-align:left; }
-    .pct { font-weight:600; text-align:left; }
-    .ts { color:#666; font-size:12px; text-align:left; }
-    .spark { display:block; width:100%; height:36px; }
-    .status-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; vertical-align:middle; }
-    .legend { color:#666; font-size:13px; margin-bottom:8px; }
-    @media(max-width:800px){
-      .row { grid-template-columns: 1fr 100px 100px; grid-auto-rows: auto; }
-      .ts, .pct { display:none; }
-    }
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Live Crypto Market — Search & Watch</title>
+<style>
+:root{
+  --bg:#0b0f14; --card:#0f1519; --border:#1b242a;
+  --text:#e6eef6; --muted:#8f9aa6; --accent:#16c784; --danger:#ff6b6b;
+  --highlight: rgba(255, 205, 60, 0.08);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);padding:18px}
+.header{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:12px}
+.h1{font-size:28px;font-weight:800}
+.hint{color:var(--muted);font-size:14px;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center}
+input[type="search"]{background:var(--card);border:1px solid var(--border);color:var(--text);
+  border-radius:10px;padding:10px 14px;width:360px;outline:none}
+.btn{background:transparent;border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:8px;cursor:pointer}
+
+/* layout */
+.page { display:flex; gap:18px; align-items:flex-start; }
+.left { flex:1; }
+.right { width:420px; max-width:40%; }
+
+/* table */
+.tableWrap{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+table{width:100%;border-collapse:collapse}
+thead th{padding:12px 16px;text-align:left;color:var(--muted);font-weight:700;border-bottom:1px solid var(--border)}
+tbody td{padding:14px 16px;border-bottom:1px solid var(--border);vertical-align:middle}
+.symbolCell{display:flex;gap:12px;align-items:center}
+.coinIcon{width:36px;height:36px;border-radius:50%;background:#071018;flex:0 0 36px}
+.coinText{display:flex;flex-direction:column}
+.coinName{font-weight:700}
+.coinSub{color:var(--muted);font-size:12px}
+.price{font-family:monospace}
+.spark{width:140px;height:44px;border-radius:6px;background:#061018;display:block}
+.placeholder .price{color:var(--muted)}
+.actionBtn{background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:16px;padding:6px 8px;border-radius:6px}
+.actionBtn:hover{color:var(--text);background:rgba(255,255,255,0.02)}
+
+/* highlight for searched symbol */
+.row-highlight{ animation: highlight-fade 1.6s ease forwards; background: var(--highlight); box-shadow: 0 6px 18px rgba(0,0,0,0.25); }
+@keyframes highlight-fade { 0%{background:rgba(255,205,60,0.22)} 40%{background:rgba(255,205,60,0.14)} 100%{background:transparent} }
+
+.pinned-label { padding:10px 0 6px 6px; color:var(--muted); font-size:13px; }
+
+/* assistant panel */
+.assistant {
+  position:sticky;
+  top:18px;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:18px;
+  height:92vh;
+  overflow:auto;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+}
+.assistant h2 { margin:0; color:#8ef; font-size:20px; font-weight:800 }
+.assistant .sub { color:var(--muted); margin-top:6px; margin-bottom:12px; font-size:13px }
+.assistant input { width:100%; padding:12px; border-radius:8px; background:#0f1419; border:1px solid #172028; color:var(--text) }
+.analyze-btn { width:100%; padding:12px; margin-top:12px; border-radius:8px; border:0; cursor:pointer; background:linear-gradient(90deg,#06b6d4,#10b981); color:#012; font-weight:700 }
+
+.notice{padding:14px;color:var(--muted)}
+@media (max-width:1000px){ .right { position: static; width:100%; } .page { flex-direction:column; } }
+</style>
 </head>
 <body>
-  <h1>Live Crypto — Top 20 (with Sparklines & 1m %)</h1>
-  <div id="status">Status: <span id="conn"><span class="status-dot" style="background:orange"></span>Connecting...</span></div>
-  <div class="legend">Price flashes green/red on change • 1m Δ% based on last 60s sample • Sparklines show recent ticks</div>
+  <div class="header">
+    <div>
+      <div class="h1">Live Crypto Market — Search, Watch & AI Assistant</div>
+      <div class="hint">Browse live crypto & commodity prices. Search to pin any symbol and open the AI trading assistant for quick analysis.</div>
+    </div>
 
-  <div class="grid" id="grid"></div>
+    <!-- search bar sits on the right, below heading -->
+    <div class="controls" style="flex-direction:column;align-items:flex-end;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input id="search" type="search" placeholder="Search symbol (e.g. BTCUSDT or BTC)" />
+        <button id="clearBtn" class="btn" title="Clear all pinned">Clear</button>
+      </div>
+    </div>
+  </div>
 
-  <script>
-    // TOP_SYMBOLS must match server's list
-    const TOP_SYMBOLS = [
-      "btcusdt","ethusdt","bnbusdt","xrpusdt","adausdt",
-      "solusdt","dogeusdt","dotusdt","maticusdt","ltcusdt",
-      "trxusdt","bchusdt","linkusdt","uniusdt","shibusdt",
-      "avaxusdt","apeusdt","axsusdt","atomusdt","sandusdt"
-    ];
+  <div class="page">
+    <div class="left">
+      <div class="tableWrap" role="region" aria-live="polite">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:38%">Name</th>
+              <th style="width:18%">Price (USD)</th>
+              <th style="width:34%">Sparkline (1m)</th>
+              <th style="width:10%">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="4" class="notice">Loading top symbols... Search any coin to pin it above.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-    const grid = document.getElementById('grid');
+    <aside class="right">
+      <div class="assistant" id="assistantPanel">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <h2>Crypto Trading Assistant</h2>
+            <div class="sub">AI-powered buy/hold/sell recommendations with live prices</div>
+          </div>
+          <button id="assistantClose" style="background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:18px">✕</button>
+        </div>
 
-    // Per-symbol state: { priceEl, pctEl, tsEl, canvas, history: [{ts,price}], lastPrice }
-    const state = {};
+        <div style="margin-top:10px;">
+          <input id="assistantCombo" placeholder="Click a coin left or type (e.g. BTC)"/>
+        </div>
 
-    TOP_SYMBOLS.forEach(sym => {
-      const row = document.createElement('div');
-      row.className = 'row';
-      row.innerHTML = `
-        <div class="symbol">${sym.toUpperCase()}</div>
-        <div class="price">—</div>
-        <div class="pct">—</div>
-        <div><canvas class="spark" width="300" height="36"></canvas></div>
-        <div class="ts">—</div>
-      `;
-      grid.appendChild(row);
+        <button id="assistantAnalyze" class="analyze-btn">Analyze Market</button>
 
-      const priceEl = row.querySelector('.price');
-      const pctEl = row.querySelector('.pct');
-      const tsEl = row.querySelector('.ts');
-      const canvas = row.querySelector('canvas');
+        <div style="margin-top:16px">
+          <div style="font-size:12px;color:var(--muted)">Live price</div>
+          <div id="assistantLivePrice" style="font-family:monospace;font-weight:700;font-size:18px">$—</div>
+        </div>
 
-      state[sym] = {
-        priceEl, pctEl, tsEl, canvas,
-        history: [], lastPrice: null,
-        flashTimeout: null
-      };
+        <div id="assistantResultArea" style="margin-top:14px"></div>
+      </div>
+    </aside>
+  </div>
 
-      // initial vanilla canvas background
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#f8f8f8';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    });
+<script>
+/* Robust client improvements:
+  - Strong symbol normalization + GOLD/XAU handling
+  - Always prefer dataset.binance (set on click) when calling /analyze
+  - If parsing assistant input, extract symbol from parentheses or remove trailing "/USD"
+  - No risky concatenation that can create "XAUUSD/USD"
+*/
 
-    const connSpan = document.getElementById('conn');
-    function setStatus(text, color) {
-      connSpan.innerHTML = `<span class="status-dot" style="background:${color}"></span>${text}`;
-    }
+const TOP_SYMBOLS = ["btcusdt","ethusdt","bnbusdt","xauusd","xrpusdt","adausdt","solusdt","dogeusdt","dotusdt","maticusdt","ltcusdt","trxusdt","bchusdt","linkusdt","uniusdt","shibusdt","avaxusdt","apeusdt","axsusdt","atomusdt","sandusdt"];
 
-    let ws;
-    let reconnectDelay = 1000;
+const tbody = document.getElementById('tbody');
+const searchEl = document.getElementById('search');
+const clearBtn = document.getElementById('clearBtn');
 
-    function createWS() {
-      const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
-      ws = new WebSocket(url);
+let allStats = {};    // symbol -> { lastPrice, ... }
+let allKlines = {};   // symbol -> [klines]
+let ws;
 
-      ws.onopen = () => {
-        setStatus('Connected', 'green');
-        reconnectDelay = 1000;
-      };
+let pinned = [];
+let watchedByUser = new Set();
 
-      ws.onmessage = (evt) => {
-        try {
-          const msg = JSON.parse(evt.data);
-          if (msg.type === 'snapshot') {
-            const snap = msg.data || {};
-            for (const s of Object.keys(snap)) {
-              const entry = snap[s];
-              if (entry && state[s]) {
-                applyTick(s, entry.price, entry.ts);
-              }
-            }
-            return;
-          }
-          if (msg.type === 'price') {
-            const sym = msg.symbol;
-            const p = msg.data.price;
-            const ts = msg.data.ts;
-            if (state[sym]) applyTick(sym, p, ts);
-          }
-        } catch (e) {
-          console.error('Invalid WS message', e, evt.data);
-        }
-      };
+// formatting helpers
+function formatPrice(p){
+  if(p === undefined || p === null || isNaN(Number(p))) return '—';
+  const n = Number(p);
+  if(Math.abs(n) >= 1000) return n.toLocaleString(undefined,{maximumFractionDigits:0});
+  if(Math.abs(n) >= 1) return n.toLocaleString(undefined,{maximumFractionDigits:2});
+  return n.toPrecision(4);
+}
 
-      ws.onclose = () => {
-        setStatus('Disconnected — reconnecting...', 'orange');
-        scheduleReconnect();
-      };
-      ws.onerror = (e) => {
-        console.error('WS error', e);
-      };
-    }
+function loadIcon(sym, img){
+  const coin = sym.replace(/usdt$/i,'').toLowerCase();
+  const url = `https://cryptoicon-api.vercel.app/api/icon/${coin}`;
+  img.dataset.src = url;
+  img.onload = ()=> img.classList.remove('loading');
+  img.onerror = ()=> {
+    const initials = (coin.slice(0,3) || coin).toUpperCase();
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36'><rect rx='8' width='100%' height='100%' fill='#071018'/><text x='50%' y='55%' dominant-baseline='middle' text-anchor='middle' font-family='Arial' font-size='12' fill='#9fb8c8'>${initials}</text></svg>`;
+    img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+  };
+  img.src = url;
+}
 
-    function scheduleReconnect() {
-      if (ws && ws.readyState === WebSocket.OPEN) return;
-      setTimeout(() => {
-        reconnectDelay = Math.min(reconnectDelay * 1.5, 30000);
-        createWS();
-      }, reconnectDelay);
-    }
+function drawSparkline(canvas, sym){
+  const ctx = canvas.getContext('2d');
+  const kl = (allKlines[sym]||[]).slice(-60);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  if(!kl || kl.length < 2){
+    ctx.fillStyle = '#061018';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    return;
+  }
+  const closes = kl.map(k=>Number(k.c));
+  const min = Math.min(...closes), max = Math.max(...closes);
+  const pad = (max - min) * 0.02 || 0.000001;
+  const range = (max + pad) - (min - pad);
+  ctx.beginPath();
+  for(let i=0;i<closes.length;i++){
+    const x = (i/(closes.length-1)) * canvas.width;
+    const y = canvas.height - ((closes[i] - (min-pad)) / range) * canvas.height;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.strokeStyle = (closes[closes.length-1] >= closes[0]) ? '#16c784' : '#ff6b6b';
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+}
 
-    // push a new tick into history, compute 1m delta, redraw sparkline
-    function applyTick(sym, priceStr, ts) {
-      const st = state[sym];
-      if (!st) return;
-      const price = Number(priceStr);
-      const now = (typeof ts === 'number') ? ts : Date.now();
+// rows
+function makeRow(sym, includeAction){
+  sym = sym.toLowerCase();
+  const tr = document.createElement('tr');
+  tr.dataset.sym = sym;
+  tr.innerHTML = `
+    <td class="symbolCell">
+      <img class="coinIcon" alt="${sym}">
+      <div class="coinText">
+        <div class="coinName">${sym.replace(/usdt$/i,'').toUpperCase()}</div>
+        <div class="coinSub">${sym}</div>
+      </div>
+    </td>
+    <td class="price placeholder">—</td>
+    <td><canvas class="spark" width="140" height="44"></canvas></td>
+    <td style="text-align:center">${includeAction ? '<button class="actionBtn" title="Unpin">✖</button>' : ''}</td>
+  `;
+  const img = tr.querySelector('.coinIcon');
+  loadIcon(sym,img);
+  tr.addEventListener('click', (ev)=> {
+    if(ev.target.closest('.actionBtn')) return;
+    selectForAssistant(sym);
+  });
+  return tr;
+}
 
-      // Keep history to last 65 seconds (safety)
-      st.history.push({ ts: now, price });
-      const cutoff = now - 60_000;
-      while (st.history.length && st.history[0].ts < cutoff) st.history.shift();
+function updateRow(tr, sym){
+  const s = allStats[sym] || {};
+  const priceEl = tr.querySelector('.price');
+  priceEl.textContent = formatPrice(s.lastPrice);
+  priceEl.classList.remove('placeholder');
+  const c = tr.querySelector('canvas.spark');
+  if(c) drawSparkline(c, sym);
+}
 
-      // update price text with flash color
-      const prev = st.lastPrice;
-      st.lastPrice = price;
-      st.priceEl.textContent = price.toFixed(8).replace(/\.?0+$/,''); // trim trailing zeros
+function renderTable(){
+  tbody.innerHTML = '';
 
-      if (prev != null) {
-        if (price > prev) flash(st.priceEl, '#e6fff0', '#007a2f'); // greenish
-        else if (price < prev) flash(st.priceEl, '#fff0f0', '#b30000'); // redish
+  if(pinned.length){
+    const labelRow = document.createElement('tr');
+    const labelTd = document.createElement('td');
+    labelTd.colSpan = 4;
+    labelTd.className = 'pinned-label';
+    labelTd.textContent = 'Pinned (search results)';
+    labelRow.appendChild(labelTd);
+    tbody.appendChild(labelRow);
+
+    for(const s of pinned){
+      const tr = makeRow(s, true);
+      tbody.appendChild(tr);
+      const btn = tr.querySelector('.actionBtn');
+      if(btn){
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await unpinSymbol(s);
+        });
       }
+      if(allStats[s]) updateRow(tr,s);
+      if(allKlines[s]) drawSparkline(tr.querySelector('canvas'), s);
+    }
+    const sep = document.createElement('tr');
+    sep.innerHTML = `<td colspan="4" style="height:8px;background:transparent"></td>`;
+    tbody.appendChild(sep);
+  }
 
-      // compute 1m percent change using oldest sample in history (if exists)
-      if (st.history.length >= 2) {
-        const oldest = st.history[0].price;
-        if (oldest && oldest > 0) {
-          const pct = ((price - oldest) / oldest) * 100;
-          st.pctEl.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
-          st.pctEl.style.color = (pct >= 0 ? '#0a7a2b' : '#b30000');
+  const topLabel = document.createElement('tr');
+  const topTd = document.createElement('td');
+  topTd.colSpan = 4;
+  topTd.className = 'pinned-label';
+  topTd.textContent = 'Top symbols';
+  topLabel.appendChild(topTd);
+  tbody.appendChild(topLabel);
+
+  for(const sym of TOP_SYMBOLS){
+    if(pinned.includes(sym)) continue;
+    const tr = makeRow(sym, false);
+    tbody.appendChild(tr);
+    if(allStats[sym]) updateRow(tr,sym);
+    if(allKlines[sym]) drawSparkline(tr.querySelector('canvas'), sym);
+  }
+}
+
+// symbol normalization & extraction helpers
+function normalizeSymbolInput(input){
+  if(!input) return '';
+  let s = input.trim().toLowerCase();
+  // remove surrounding whitespace and common separators
+  s = s.replace(/\s+/g,'').replace(/\\/g,'').replace(/,/g,'');
+
+  // if input contains parentheses like "BTC/USD (BTCUSDT)" prefer content inside parentheses
+  const paren = s.match(/\(([^)]+)\)/);
+  if(paren && paren[1]) {
+    s = paren[1].toLowerCase();
+  }
+
+  // remove trailing /usd or /usdt representation when present (we want raw symbol)
+  s = s.replace(/\/usd$/i,'').replace(/\/usdt$/i,'');
+
+  // special-case many gold inputs -> xauusd
+  if(/^gold$/.test(s) || /^xau$/.test(s) || /^xauusd$/.test(s) || /^goldusdt$/.test(s) || /^goldusd$/.test(s)){
+    return 'xauusd';
+  }
+
+  // if user typed short ticker like 'btc' or 'eth', append 'usdt'
+  if(/^[a-z]{2,8}$/.test(s) && !/usdt$/.test(s)){
+    s = s + 'usdt';
+  }
+
+  // ensure final form is lowercase binance key like 'btcusdt' or 'xauusd'
+  return s.toLowerCase();
+}
+
+// pin/unpin
+async function pinSymbol(sym){
+  sym = sym.toLowerCase();
+  if(!watchedByUser.has(sym)){
+    watchedByUser.add(sym);
+    try { ws.send(JSON.stringify({action:'watch', symbol: sym})); } catch(e){ console.warn('ws send failed', e); }
+  }
+  pinned = pinned.filter(x => x !== sym);
+  pinned.unshift(sym);
+  renderTable();
+  const tr = tbody.querySelector(`tr[data-sym="${sym}"]`);
+  if(tr && allStats[sym]) updateRow(tr,sym);
+}
+
+async function unpinSymbol(sym){
+  sym = sym.toLowerCase();
+  pinned = pinned.filter(x => x !== sym);
+  watchedByUser.delete(sym);
+  try { ws.send(JSON.stringify({action:'unwatch', symbol: sym})); } catch(e){ console.warn('ws send failed', e); }
+  renderTable();
+}
+
+// highlight + focus
+function highlightAndFocus(sym){
+  const tr = tbody.querySelector(`tr[data-sym="${sym}"]`);
+  if(!tr) return;
+  tr.classList.remove('row-highlight');
+  void tr.offsetWidth;
+  tr.classList.add('row-highlight');
+  tr.scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+// assistant panel
+const assistantComboInput = document.getElementById('assistantCombo');
+const assistantLivePriceEl = document.getElementById('assistantLivePrice');
+const assistantResultArea = document.getElementById('assistantResultArea');
+const assistantAnalyzeBtn = document.getElementById('assistantAnalyze');
+const assistantCloseBtn = document.getElementById('assistantClose');
+
+assistantCloseBtn.addEventListener('click', ()=> {
+  document.getElementById('assistantPanel').style.display = 'none';
+});
+
+function binanceToTicker(b){
+  if(!b) return '';
+  b = b.toLowerCase();
+  
+  // Special case for gold
+  if(b === 'xauusd' || b === 'xau') {
+    return 'XAU/USD';
+  }
+  
+  // For regular crypto, remove 'usdt' suffix
+  const base = b.replace(/usdt$/i,'').toUpperCase();
+  return `${base}/USD`;
+}
+
+// When user clicks a row or code selects a symbol, set dataset.binance explicitly
+function selectForAssistant(binanceSymbol){
+  const panel = document.getElementById('assistantPanel');
+  panel.style.display = 'block';
+  // binanceSymbol is like 'btcusdt' or 'xauusd'
+  assistantComboInput.value = `${binanceToTicker(binanceSymbol)} (${binanceSymbol.toUpperCase()})`;
+  assistantComboInput.dataset.binance = binanceSymbol.toLowerCase();
+  // update live price if cached
+  const cached = allStats[binanceSymbol.toLowerCase()];
+  if(cached && cached.lastPrice){
+    assistantLivePriceEl.textContent = '$' + formatPrice(cached.lastPrice);
+  } else {
+    assistantLivePriceEl.textContent = '$—';
+  }
+}
+
+// When analyze clicked, prefer dataset.binance. If not present, extract robustly from input.
+assistantAnalyzeBtn.addEventListener('click', async ()=>{
+  // prefer the explicit dataset (set on click). If not present, parse input text.
+  let raw = assistantComboInput.dataset.binance || normalizeSymbolInput(assistantComboInput.value || '');
+  if(!raw){
+    return alert('Choose a coin first.');
+  }
+  // final sanity: normalized form like 'btcusdt' or 'xauusd'
+  raw = normalizeSymbolInput(raw);
+
+  assistantAnalyzeBtn.disabled = true;
+  assistantAnalyzeBtn.textContent = 'Analyzing...';
+  assistantResultArea.innerHTML = '';
+  try{
+    const resp = await fetch('/analyze', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      // send the binance symbol (UPPERCASE) — server knows how to map to a TICKER for n8n
+      body: JSON.stringify({ binanceSymbol: raw.toUpperCase() })
+    });
+    const j = await resp.json();
+
+    if(!j.ok){
+      assistantResultArea.innerHTML = `<div style="color:var(--danger);font-weight:700;margin-top:12px">Analysis failed</div>`;
+      return;
+    }
+
+    // attempt to extract analysis payload from j.n8n robustly
+    let analysis = null;
+    if(j.n8n){
+      if(typeof j.n8n === 'string'){
+        try{ analysis = JSON.parse(j.n8n); } catch(e){ analysis = { raw: j.n8n }; }
+      } else if(typeof j.n8n === 'object'){
+        // many n8n flows return { output: "...json..." } or { output: {...} }
+        if(j.n8n.output){
+          if(typeof j.n8n.output === 'string'){
+            try{ analysis = JSON.parse(j.n8n.output); } catch(e){ analysis = j.n8n.output; }
+          } else {
+            analysis = j.n8n.output;
+          }
         } else {
-          st.pctEl.textContent = '—';
-          st.pctEl.style.color = '#333';
+          analysis = j.n8n;
         }
       } else {
-        st.pctEl.textContent = '—';
-        st.pctEl.style.color = '#333';
+        analysis = { raw: j.n8n };
       }
-
-      st.tsEl.textContent = new Date(now).toLocaleTimeString();
-
-      // redraw sparkline
-      drawSparkline(st.canvas, st.history);
+    } else {
+      analysis = j; // fallback to top-level
     }
 
-    function flash(elem, bgColor, textColor) {
-      // apply a quick style flash
-      const oldBg = elem.style.backgroundColor;
-      const oldColor = elem.style.color;
-      elem.style.backgroundColor = bgColor;
-      elem.style.color = textColor;
-      if (elem.flashTimeout) clearTimeout(elem.flashTimeout);
-      elem.flashTimeout = setTimeout(() => {
-        elem.style.backgroundColor = oldBg || '';
-        elem.style.color = oldColor || '';
-      }, 300);
-    }
+    // normalize fields commonly used by your n8n
+    const payload = analysis || {};
+    const decision = payload.decision || payload.recommendation || 'N/A';
+    const buyPrice = payload.buyPrice || payload.entryPrice || payload.buy_price || 0;
+    const stopLoss = payload.stopLoss || payload.stop_loss || 0;
+    const targetExit = payload.targetExit || payload.target || payload.target_exit || 0;
+    const rationale = payload.rationale || payload.rationale_text || payload.analysis || '';
+    // prefer j.currentPrice (server returned) else payload.currentPrice else cached live
+    const currentPrice = j.currentPrice || payload.currentPrice || payload.current_price || (allStats[raw] && allStats[raw].lastPrice) || null;
 
-    function drawSparkline(canvas, history) {
-      const ctx = canvas.getContext('2d');
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx.clearRect(0,0,w,h);
+    assistantLivePriceEl.textContent = currentPrice ? ('$' + formatPrice(currentPrice)) : '$—';
 
-      if (!history || history.length < 2) {
-        // light placeholder
-        ctx.fillStyle = '#fafafa';
-        ctx.fillRect(0,0,w,h);
-        return;
+    assistantResultArea.innerHTML = `
+      <div style="background:#081018;border-radius:8px;padding:12px;margin-top:8px">
+        <div style="font-weight:700;color:#8fe">${payload.ticker || binanceToTicker(raw)}</div>
+        <div style="margin-top:8px;font-size:20px;font-weight:800;color:${String(decision).toLowerCase().includes('buy')? '#10b981' : String(decision).toLowerCase().includes('sell')? '#ef4444' : '#f59e0b'}">${decision}</div>
+        <div style="margin-top:12px;display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+          <div style="font-size:12px;color:#9aa">Entry</div><div style="font-weight:700">$${formatPrice(buyPrice)}</div>
+          <div style="font-size:12px;color:#9aa">Stop</div><div style="font-weight:700;color:#ef4444">$${formatPrice(stopLoss)}</div>
+          <div style="font-size:12px;color:#9aa">Target</div><div style="font-weight:700;color:#10b981">$${formatPrice(targetExit)}</div>
+        </div>
+        <div style="margin-top:12px;color:#bcd">${rationale || JSON.stringify(payload).slice(0,800)}</div>
+      </div>
+    `;
+  } catch(err){
+    console.error('analyze error', err);
+    assistantResultArea.innerHTML = `<div style="color:var(--danger);font-weight:700;margin-top:12px">Analysis failed</div>`;
+  } finally {
+    assistantAnalyzeBtn.disabled = false;
+    assistantAnalyzeBtn.textContent = 'Analyze Market';
+  }
+});
+
+// WebSocket (seed caches, update UI & assistant live price)
+function connect(){
+  const url = (location.protocol==='https:'?'wss://':'ws://') + window.location.host + '/ws';
+  ws = new WebSocket(url);
+  ws.onopen = ()=> console.log('ws open');
+  ws.onclose = ()=> setTimeout(connect, 1500);
+  ws.onmessage = (ev) => {
+    let m; try { m = JSON.parse(ev.data); } catch(e){ return; }
+    if(m.type === 'snapshot'){
+      if(m.prices){
+        for(const k of Object.keys(m.prices)){
+          try{ const p = m.prices[k]; if(p) { allStats[k] = allStats[k] || {}; allStats[k].lastPrice = Number(p.price || p.lastPrice || p); } } catch(e){}
+        }
       }
-
-      // map history timestamps to x positions (relative to last 60s)
-      const now = history[history.length-1].ts;
-      const start = now - 60_000; // 60s window
-      // find min/max price for scaling (use small padding)
-      let minP = Infinity, maxP = -Infinity;
-      for (const p of history) { if (p.price < minP) minP = p.price; if (p.price > maxP) maxP = p.price; }
-      if (minP === maxP) { minP = minP * 0.9999; maxP = maxP * 1.0001; }
-      const pad = (maxP - minP) * 0.05;
-      minP -= pad; maxP += pad;
-
-      // prepare points
-      const pts = history.map(pt => {
-        const x = ((pt.ts - start) / 60000) * w; // from 0..w
-        const y = h - ((pt.price - minP) / (maxP - minP) * h);
-        return {x, y};
+      if(m.klines){
+        for(const k of Object.keys(m.klines)) allKlines[k] = m.klines[k] || allKlines[k];
+      }
+      renderTable();
+      Object.keys(allStats).forEach(sym=>{
+        const tr = tbody.querySelector(`tr[data-sym="${sym}"]`);
+        if(tr) updateRow(tr,sym);
       });
-
-      // draw background
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0,0,w,h);
-
-      // draw area under curve (subtle)
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, h);
-      for (const p of pts) ctx.lineTo(p.x, p.y);
-      ctx.lineTo(pts[pts.length-1].x, h);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(0,122,47,0.06)';
-      ctx.fill();
-
-      // draw line
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i=1;i<pts.length;i++){
-        ctx.lineTo(pts[i].x, pts[i].y);
-      }
-      ctx.strokeStyle = '#007a2f';
-      ctx.lineWidth = 1.6;
-      ctx.stroke();
-
-      // draw last dot
-      const last = pts[pts.length-1];
-      ctx.beginPath();
-      ctx.arc(last.x, last.y, 2.6, 0, Math.PI*2);
-      ctx.fillStyle = '#007a2f';
-      ctx.fill();
+      return;
     }
 
-    // start WS
-    createWS();
-  </script>
+    if(m.type === 'miniTicker'){
+      const s = (m.symbol||'').toLowerCase();
+      if(!s) return;
+      allStats[s] = allStats[s] || {};
+      allStats[s].lastPrice = Number(m.lastPrice || m.last || allStats[s].lastPrice || 0);
+      const tr = tbody.querySelector(`tr[data-sym="${s}"]`);
+      if(tr) updateRow(tr,s);
+      const assistantSym = (assistantComboInput.dataset.binance || '').toLowerCase();
+      if(assistantSym === s){
+        assistantLivePriceEl.textContent = '$' + formatPrice(allStats[s].lastPrice);
+      }
+      return;
+    }
+
+    if(m.type === 'trade' || m.type === 'price' || m.type === 'price_update'){
+      const s = (m.symbol || '').toLowerCase();
+      if(!s) return;
+      allStats[s] = allStats[s] || {};
+      allStats[s].lastPrice = Number(m.price || (m.data && m.data.price) || m.lastPrice || allStats[s].lastPrice || 0);
+      const tr = tbody.querySelector(`tr[data-sym="${s}"]`);
+      if(tr) updateRow(tr,s);
+      const assistantSym = (assistantComboInput.dataset.binance || '').toLowerCase();
+      if(assistantSym === s){
+        assistantLivePriceEl.textContent = '$' + formatPrice(allStats[s].lastPrice);
+      }
+      return;
+    }
+
+    if(m.type === 'kline' || (m.k && m.k.c)){
+      const sym = (m.symbol || (m.k && (m.k.s || m.s)) || '').toLowerCase();
+      const k = m.k || m.data || m;
+      if(!sym) return;
+      allKlines[sym] = allKlines[sym] || [];
+      const kl = {t: k.t, T: k.T, o: k.o, h: k.h, l: k.l, c: k.c, v: k.v, x: k.x};
+      allKlines[sym].push(kl);
+      if(allKlines[sym].length > 240) allKlines[sym].shift();
+      const row = tbody.querySelector(`tr[data-sym="${sym}"]`);
+      if(row){
+        const canvas = row.querySelector('canvas.spark');
+        if(canvas) drawSparkline(canvas, sym);
+      }
+      return;
+    }
+  };
+}
+connect();
+
+// search handling (enter)
+searchEl.addEventListener('keypress', (e)=>{
+  if(e.key !== 'Enter') return;
+  const raw = searchEl.value.trim();
+  if(!raw) return;
+  const sym = normalizeSymbolInput(raw);
+  if(!sym) return;
+  pinSymbol(sym);
+  highlightAndFocus(sym);
+  searchEl.value = '';
+});
+
+// clear pinned
+clearBtn.addEventListener('click', async ()=>{
+  const toUnwatch = Array.from(watchedByUser);
+  for(const s of toUnwatch){
+    try { ws.send(JSON.stringify({action:'unwatch', symbol: s})); } catch(e){}
+  }
+  pinned = [];
+  watchedByUser.clear();
+  renderTable();
+});
+
+// periodic redraw for sparklines
+setInterval(()=>{
+  document.querySelectorAll('#tbody tr').forEach(tr=>{
+    const sym = tr.dataset.sym;
+    if(!sym) return;
+    if(allStats[sym]) updateRow(tr,sym);
+    const c = tr.querySelector('canvas.spark');
+    if(c) drawSparkline(c, sym);
+  });
+}, 1000);
+</script>
 </body>
 </html>
