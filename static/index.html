@@ -16,9 +16,12 @@ body{margin:0;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;background:var(
 .h1{font-size:28px;font-weight:800}
 .hint{color:var(--muted);font-size:14px;margin-top:4px}
 .controls{display:flex;gap:10px;align-items:center}
+
+/* SEARCH input sizing fix: use min-width so it doesn't collapse in header */
+.search-wrap { display:flex; gap:8px; align-items:center; min-width:260px; max-width:480px; }
 input[type="search"]{background:var(--card);border:1px solid var(--border);color:var(--text);
-  border-radius:10px;padding:10px 14px;width:360px;outline:none}
-.btn{background:transparent;border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:8px;cursor:pointer}
+  border-radius:10px;padding:10px 14px;outline:none;flex:1;min-width:180px}
+.btn{background:transparent;border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}
 
 /* layout */
 .page { display:flex; gap:18px; align-items:flex-start; }
@@ -47,7 +50,7 @@ tbody td{padding:14px 16px;border-bottom:1px solid var(--border);vertical-align:
 
 .pinned-label { padding:10px 0 6px 6px; color:var(--muted); font-size:13px; }
 
-/* assistant panel */
+/* assistant panel (desktop) */
 .assistant {
   position:sticky;
   top:18px;
@@ -62,10 +65,93 @@ tbody td{padding:14px 16px;border-bottom:1px solid var(--border);vertical-align:
 .assistant h2 { margin:0; color:#8ef; font-size:20px; font-weight:800 }
 .assistant .sub { color:var(--muted); margin-top:6px; margin-bottom:12px; font-size:13px }
 .assistant input { width:100%; padding:12px; border-radius:8px; background:#0f1419; border:1px solid #172028; color:var(--text) }
-.analyze-btn { width:100%; padding:12px; margin-top:12px; border-radius:8px; border:0; cursor:pointer; background:linear-gradient(90deg,#06b6d4,#10b981); color:#012; font-weight:700 }
+.analyze-btn { width:100%; padding:12px; margin-top:12px; border-radius:8px; border:0; cursor:pointer; background:linear-gradient(90deg,#06b6d4,#10b981); color:#012; font-weight:700; display:flex; align-items:center; justify-content:center; gap:10px;}
 
-.notice{padding:14px;color:var(--muted)}
-@media (max-width:1000px){ .right { position: static; width:100%; } .page { flex-direction:column; } }
+/* little loader */
+.loader {
+  border:3px solid rgba(255,255,255,0.06);
+  border-top:3px solid rgba(255,255,255,0.85);
+  width:18px;
+  height:18px;
+  border-radius:50%;
+  animation:spin 0.9s linear infinite;
+  display:inline-block;
+  vertical-align:middle;
+}
+.analyzing-text { font-weight:700; color: #012; }
+
+/* mobile specific: show floating chat icon and overlay when narrow */
+#mobileChatBtn {
+  display:none; /* shown on narrow screens */
+  position:fixed;
+  right:18px;
+  bottom:18px;
+  width:56px;
+  height:56px;
+  border-radius:50%;
+  background:linear-gradient(90deg,#06b6d4,#10b981);
+  color:#042;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+  border:0;
+  cursor:pointer;
+  z-index:1400;
+  align-items:center;
+  justify-content:center;
+  font-weight:900;
+}
+
+/* overlay helper class when mobile assistant is open */
+.mobile-assistant-overlay {
+  display:none;
+  position:fixed;
+  inset:0;
+  z-index:1350;
+  background:rgba(0,0,0,0.4);
+}
+
+/* mobile assistant style (when open) */
+.mobile-assistant-open .mobile-assistant-overlay { display:block; }
+.mobile-assistant-panel {
+  position:fixed;
+  right:0;
+  bottom:0;
+  left:0;
+  height:82vh;
+  max-height:82vh;
+  margin: auto 12px 12px;
+  background:var(--card);
+  border-radius:12px;
+  border:1px solid var(--border);
+  padding:14px;
+  z-index:1401;
+  box-shadow:0 20px 80px rgba(0,0,0,0.7);
+  overflow:auto;
+}
+
+/* hide desktop right column on mobile so mobile overlay is the main UI */
+@media (max-width: 900px) {
+  .right { display:none; } /* keep DOM element for desktop, but hide on mobile */
+  .page { flex-direction:column; }
+  .search-wrap { max-width:100%; width:100%; }
+  input[type="search"]{ width:100%; }
+  #mobileChatBtn { display:flex; }
+  /* show the assistant as a full overlay panel (we will toggle .mobile-assistant-open on body) */
+  .assistant { display:none; } /* hide desktop assistant */
+}
+
+/* If mobile overlay active, show the mobile panel by toggling class on body */
+body.mobile-assistant-open .mobile-assistant-panel { display:block; }
+.mobile-assistant-panel { display:none; }
+
+/* small tweaks for mobile internal layout */
+@media (max-width:420px){
+  body{padding:10px}
+  .h1{font-size:20px}
+  .header{align-items:flex-start}
+}
+
+/* small accessibility */
+[role="status"]{position:relative}
 </style>
 </head>
 <body>
@@ -77,8 +163,8 @@ tbody td{padding:14px 16px;border-bottom:1px solid var(--border);vertical-align:
 
     <!-- search bar sits on the right, below heading -->
     <div class="controls" style="flex-direction:column;align-items:flex-end;">
-      <div style="display:flex;gap:8px;align-items:center;">
-        <input id="search" type="search" placeholder="Search symbol (e.g. BTCUSDT or BTC)" />
+      <div class="search-wrap">
+        <input id="search" type="search" placeholder="Search symbol (e.g. BTCUSDT or BTC)" aria-label="Search symbol"/>
         <button id="clearBtn" class="btn" title="Clear all pinned">Clear</button>
       </div>
     </div>
@@ -104,20 +190,27 @@ tbody td{padding:14px 16px;border-bottom:1px solid var(--border);vertical-align:
     </div>
 
     <aside class="right">
-      <div class="assistant" id="assistantPanel">
+      <div class="assistant" id="assistantPanel" aria-hidden="false">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <div>
             <h2>Crypto Trading Assistant</h2>
             <div class="sub">AI-powered buy/hold/sell recommendations with live prices</div>
           </div>
-          <button id="assistantClose" style="background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:18px">✕</button>
+          <button id="assistantClose" style="background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:18px" title="Close">✕</button>
         </div>
 
         <div style="margin-top:10px;">
           <input id="assistantCombo" placeholder="Click a coin left or type (e.g. BTC)"/>
         </div>
 
-        <button id="assistantAnalyze" class="analyze-btn">Analyze Market</button>
+        <button id="assistantAnalyze" class="analyze-btn">
+          <span id="assistantAnalyzeContent"><span style="opacity:0.95">Analyze Market</span></span>
+        </button>
+
+        <div id="assistantLoadingStatus" role="status" aria-live="polite" style="display:none;margin-top:12px;">
+          <span class="loader" aria-hidden="true"></span>
+          <span style="margin-left:8px;color:var(--muted)">Analyzing market data…</span>
+        </div>
 
         <div style="margin-top:16px">
           <div style="font-size:12px;color:var(--muted)">Live price</div>
@@ -129,14 +222,47 @@ tbody td{padding:14px 16px;border-bottom:1px solid var(--border);vertical-align:
     </aside>
   </div>
 
-<script>
-/* Robust client improvements:
-  - Strong symbol normalization + GOLD/XAU handling
-  - Always prefer dataset.binance (set on click) when calling /analyze
-  - If parsing assistant input, extract symbol from parentheses or remove trailing "/USD"
-  - No risky concatenation that can create "XAUUSD/USD"
-*/
+  <!-- Mobile chat button (only visible on small screens) -->
+  <button id="mobileChatBtn" title="Open trading assistant" aria-label="Open trading assistant">💬</button>
 
+  <!-- Mobile assistant overlay + panel (re-uses assistant content) -->
+  <div class="mobile-assistant-overlay" id="mobileOverlay" aria-hidden="true"></div>
+  <div class="mobile-assistant-panel" id="mobileAssistantPanel" role="dialog" aria-modal="true" aria-labelledby="mobileAssistantTitle">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <div>
+        <h2 id="mobileAssistantTitle">Crypto Trading Assistant</h2>
+        <div class="sub">AI-powered buy/hold/sell recommendations with live prices</div>
+      </div>
+      <button id="mobileAssistantClose" style="background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:18px" title="Close">✕</button>
+    </div>
+
+    <div id="mobileAssistantContent">
+      <!-- mobile helper elements: we mirror desktop content into these -->
+      <div style="margin-top:8px">
+        <input id="assistantCombo_mobile_helper" placeholder="Click a coin left or type (e.g. BTC)" style="width:100%;padding:12px;border-radius:8px;background:#0f1419;border:1px solid #172028;color:var(--text)" />
+      </div>
+      <div style="margin-top:10px">
+        <button id="assistantAnalyze_mobileHelper" class="analyze-btn">
+          <span id="assistantAnalyzeContent_mobile">Analyze Market</span>
+        </button>
+      </div>
+
+      <div id="assistantLoadingStatus_mobile" role="status" aria-live="polite" style="display:none;margin-top:12px;">
+        <span class="loader" aria-hidden="true"></span>
+        <span style="margin-left:8px;color:var(--muted)">Analyzing market data…</span>
+      </div>
+
+      <div style="margin-top:16px">
+        <div style="font-size:12px;color:var(--muted)">Live price</div>
+        <div id="assistantLivePrice_mobile" style="font-family:monospace;font-weight:700;font-size:18px">$—</div>
+      </div>
+
+      <div id="assistantResultArea_mobile" style="margin-top:14px"></div>
+    </div>
+  </div>
+
+<script>
+/* ---------- Config & top symbols ---------- */
 const TOP_SYMBOLS = ["btcusdt","ethusdt","bnbusdt","xauusd","xrpusdt","adausdt","solusdt","dogeusdt","dotusdt","maticusdt","ltcusdt","trxusdt","bchusdt","linkusdt","uniusdt","shibusdt","avaxusdt","apeusdt","axsusdt","atomusdt","sandusdt"];
 
 const tbody = document.getElementById('tbody');
@@ -150,7 +276,7 @@ let ws;
 let pinned = [];
 let watchedByUser = new Set();
 
-// formatting helpers
+/* ---------- helpers ---------- */
 function formatPrice(p){
   if(p === undefined || p === null || isNaN(Number(p))) return '—';
   const n = Number(p);
@@ -196,7 +322,7 @@ function drawSparkline(canvas, sym){
   ctx.stroke();
 }
 
-// rows
+/* ---------- row utilities ---------- */
 function makeRow(sym, includeAction){
   sym = sym.toLowerCase();
   const tr = document.createElement('tr');
@@ -278,37 +404,29 @@ function renderTable(){
   }
 }
 
-// symbol normalization & extraction helpers
+/* ---------- symbol normalization & extraction ---------- */
 function normalizeSymbolInput(input){
   if(!input) return '';
   let s = input.trim().toLowerCase();
-  // remove surrounding whitespace and common separators
   s = s.replace(/\s+/g,'').replace(/\\/g,'').replace(/,/g,'');
 
-  // if input contains parentheses like "BTC/USD (BTCUSDT)" prefer content inside parentheses
   const paren = s.match(/\(([^)]+)\)/);
-  if(paren && paren[1]) {
-    s = paren[1].toLowerCase();
-  }
+  if(paren && paren[1]) s = paren[1].toLowerCase();
 
-  // remove trailing /usd or /usdt representation when present (we want raw symbol)
   s = s.replace(/\/usd$/i,'').replace(/\/usdt$/i,'');
 
-  // special-case many gold inputs -> xauusd
   if(/^gold$/.test(s) || /^xau$/.test(s) || /^xauusd$/.test(s) || /^goldusdt$/.test(s) || /^goldusd$/.test(s)){
     return 'xauusd';
   }
 
-  // if user typed short ticker like 'btc' or 'eth', append 'usdt'
   if(/^[a-z]{2,8}$/.test(s) && !/usdt$/.test(s)){
     s = s + 'usdt';
   }
 
-  // ensure final form is lowercase binance key like 'btcusdt' or 'xauusd'
   return s.toLowerCase();
 }
 
-// pin/unpin
+/* ---------- pin/unpin ---------- */
 async function pinSymbol(sym){
   sym = sym.toLowerCase();
   if(!watchedByUser.has(sym)){
@@ -330,7 +448,7 @@ async function unpinSymbol(sym){
   renderTable();
 }
 
-// highlight + focus
+/* ---------- highlight + focus ---------- */
 function highlightAndFocus(sym){
   const tr = tbody.querySelector(`tr[data-sym="${sym}"]`);
   if(!tr) return;
@@ -340,108 +458,138 @@ function highlightAndFocus(sym){
   tr.scrollIntoView({behavior:'smooth', block:'center'});
 }
 
-// assistant panel
+/* ---------- assistant panel logic (desktop) ---------- */
 const assistantComboInput = document.getElementById('assistantCombo');
 const assistantLivePriceEl = document.getElementById('assistantLivePrice');
 const assistantResultArea = document.getElementById('assistantResultArea');
 const assistantAnalyzeBtn = document.getElementById('assistantAnalyze');
 const assistantCloseBtn = document.getElementById('assistantClose');
+const assistantLoadingStatus = document.getElementById('assistantLoadingStatus');
+const assistantAnalyzeContent = document.getElementById('assistantAnalyzeContent');
 
-assistantCloseBtn.addEventListener('click', ()=> {
-  document.getElementById('assistantPanel').style.display = 'none';
-});
+const assistantCombo_mobile_helper = document.getElementById('assistantCombo_mobile_helper');
+const assistantAnalyze_mobileHelper = document.getElementById('assistantAnalyze_mobileHelper');
+const assistantLivePrice_mobile = document.getElementById('assistantLivePrice_mobile');
+const assistantResultArea_mobile = document.getElementById('assistantResultArea_mobile');
+const assistantLoadingStatus_mobile = document.getElementById('assistantLoadingStatus_mobile');
+const assistantAnalyzeContent_mobile = document.getElementById('assistantAnalyzeContent_mobile');
 
 function binanceToTicker(b){
   if(!b) return '';
   b = b.toLowerCase();
-  
-  // Special case for gold
-  if(b === 'xauusd' || b === 'xau') {
-    return 'XAU/USD';
-  }
-  
-  // For regular crypto, remove 'usdt' suffix
+  if(b === 'xauusd' || b === 'xau') return 'XAU/USD';
   const base = b.replace(/usdt$/i,'').toUpperCase();
   return `${base}/USD`;
 }
 
-// When user clicks a row or code selects a symbol, set dataset.binance explicitly
+function setAnalyzing(on){
+  // desktop
+  if(on){
+    assistantAnalyzeBtn.disabled = true;
+    assistantLoadingStatus.style.display = 'block';
+    assistantAnalyzeContent.innerHTML = `<span style="opacity:0.0">Analyze Market</span>`; // keep width
+  } else {
+    assistantAnalyzeBtn.disabled = false;
+    assistantLoadingStatus.style.display = 'none';
+    assistantAnalyzeContent.innerHTML = `<span style="opacity:0.95">Analyze Market</span>`;
+  }
+  // mobile
+  if(on){
+    assistantAnalyze_mobileHelper.disabled = true;
+    assistantLoadingStatus_mobile.style.display = 'block';
+    assistantAnalyzeContent_mobile.textContent = 'Analyzing...';
+  } else {
+    assistantAnalyze_mobileHelper.disabled = false;
+    assistantLoadingStatus_mobile.style.display = 'none';
+    assistantAnalyzeContent_mobile.textContent = 'Analyze Market';
+  }
+}
+
+/* When user clicks a row or code selects a symbol, set dataset.binance explicitly */
 function selectForAssistant(binanceSymbol){
   const panel = document.getElementById('assistantPanel');
-  panel.style.display = 'block';
-  // binanceSymbol is like 'btcusdt' or 'xauusd'
+  if(panel) panel.style.display = 'block';
   assistantComboInput.value = `${binanceToTicker(binanceSymbol)} (${binanceSymbol.toUpperCase()})`;
   assistantComboInput.dataset.binance = binanceSymbol.toLowerCase();
-  // update live price if cached
   const cached = allStats[binanceSymbol.toLowerCase()];
   if(cached && cached.lastPrice){
     assistantLivePriceEl.textContent = '$' + formatPrice(cached.lastPrice);
   } else {
     assistantLivePriceEl.textContent = '$—';
   }
+  if(window.innerWidth <= 900) openMobileAssistantFromDesktop();
 }
 
-// When analyze clicked, prefer dataset.binance. If not present, extract robustly from input.
-assistantAnalyzeBtn.addEventListener('click', async ()=>{
-  // prefer the explicit dataset (set on click). If not present, parse input text.
-  let raw = assistantComboInput.dataset.binance || normalizeSymbolInput(assistantComboInput.value || '');
-  if(!raw){
-    return alert('Choose a coin first.');
+/* ---------- analyze logic with timeout and robust parsing ---------- */
+function parseN8nPayload(j){
+  let analysis = null;
+  if(j.n8n){
+    if(typeof j.n8n === 'string'){
+      try{ analysis = JSON.parse(j.n8n); } catch(e){ analysis = { raw: j.n8n }; }
+    } else if(typeof j.n8n === 'object'){
+      if(j.n8n.output){
+        if(typeof j.n8n.output === 'string'){
+          try{ analysis = JSON.parse(j.n8n.output); } catch(e){ analysis = j.n8n.output; }
+        } else {
+          analysis = j.n8n.output;
+        }
+      } else {
+        analysis = j.n8n;
+      }
+    } else {
+      analysis = { raw: j.n8n };
+    }
+  } else {
+    analysis = j;
   }
-  // final sanity: normalized form like 'btcusdt' or 'xauusd'
-  raw = normalizeSymbolInput(raw);
+  return analysis || {};
+}
 
-  assistantAnalyzeBtn.disabled = true;
-  assistantAnalyzeBtn.textContent = 'Analyzing...';
-  assistantResultArea.innerHTML = '';
+async function analyzeRequest(rawUpper){
+  // performs fetch with 12s timeout
+  const controller = new AbortController();
+  const timeout = setTimeout(()=> controller.abort(), 12000);
   try{
     const resp = await fetch('/analyze', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      // send the binance symbol (UPPERCASE) — server knows how to map to a TICKER for n8n
-      body: JSON.stringify({ binanceSymbol: raw.toUpperCase() })
+      body: JSON.stringify({ binanceSymbol: rawUpper }),
+      signal: controller.signal
     });
-    const j = await resp.json();
+    clearTimeout(timeout);
+    return await resp.json();
+  } catch(err){
+    clearTimeout(timeout);
+    throw err;
+  }
+}
 
+assistantAnalyzeBtn.addEventListener('click', async ()=>{
+  let raw = assistantComboInput.dataset.binance || normalizeSymbolInput(assistantComboInput.value || '');
+  if(!raw) return alert('Choose a coin first.');
+  raw = normalizeSymbolInput(raw);
+
+  setAnalyzing(true);
+  assistantResultArea.innerHTML = '';
+
+  try{
+    const j = await analyzeRequest(raw.toUpperCase());
     if(!j.ok){
       assistantResultArea.innerHTML = `<div style="color:var(--danger);font-weight:700;margin-top:12px">Analysis failed</div>`;
       return;
     }
 
-    // attempt to extract analysis payload from j.n8n robustly
-    let analysis = null;
-    if(j.n8n){
-      if(typeof j.n8n === 'string'){
-        try{ analysis = JSON.parse(j.n8n); } catch(e){ analysis = { raw: j.n8n }; }
-      } else if(typeof j.n8n === 'object'){
-        // many n8n flows return { output: "...json..." } or { output: {...} }
-        if(j.n8n.output){
-          if(typeof j.n8n.output === 'string'){
-            try{ analysis = JSON.parse(j.n8n.output); } catch(e){ analysis = j.n8n.output; }
-          } else {
-            analysis = j.n8n.output;
-          }
-        } else {
-          analysis = j.n8n;
-        }
-      } else {
-        analysis = { raw: j.n8n };
-      }
-    } else {
-      analysis = j; // fallback to top-level
-    }
-
-    // normalize fields commonly used by your n8n
-    const payload = analysis || {};
-    const decision = payload.decision || payload.recommendation || 'N/A';
+    const payload = parseN8nPayload(j);
+    const decision = payload.decision || payload.recommendation || payload.recommendationText || 'N/A';
     const buyPrice = payload.buyPrice || payload.entryPrice || payload.buy_price || 0;
     const stopLoss = payload.stopLoss || payload.stop_loss || 0;
     const targetExit = payload.targetExit || payload.target || payload.target_exit || 0;
     const rationale = payload.rationale || payload.rationale_text || payload.analysis || '';
-    // prefer j.currentPrice (server returned) else payload.currentPrice else cached live
-    const currentPrice = j.currentPrice || payload.currentPrice || payload.current_price || (allStats[raw] && allStats[raw].lastPrice) || null;
 
-    assistantLivePriceEl.textContent = currentPrice ? ('$' + formatPrice(currentPrice)) : '$—';
+    const currentPrice = j.currentPrice || payload.currentPrice || payload.current_price || (allStats[raw] && allStats[raw].lastPrice) || null;
+    const displayPrice = currentPrice || (allStats[raw] && allStats[raw].lastPrice);
+
+    assistantLivePriceEl.textContent = displayPrice ? ('$' + formatPrice(displayPrice)) : '$—';
 
     assistantResultArea.innerHTML = `
       <div style="background:#081018;border-radius:8px;padding:12px;margin-top:8px">
@@ -457,14 +605,14 @@ assistantAnalyzeBtn.addEventListener('click', async ()=>{
     `;
   } catch(err){
     console.error('analyze error', err);
-    assistantResultArea.innerHTML = `<div style="color:var(--danger);font-weight:700;margin-top:12px">Analysis failed</div>`;
+    const message = (err.name === 'AbortError') ? 'Analysis timed out. Try again.' : 'Unable to connect to analysis service.';
+    assistantResultArea.innerHTML = `<div style="color:var(--danger);font-weight:700;margin-top:12px">${message}</div>`;
   } finally {
-    assistantAnalyzeBtn.disabled = false;
-    assistantAnalyzeBtn.textContent = 'Analyze Market';
+    setAnalyzing(false);
   }
 });
 
-// WebSocket (seed caches, update UI & assistant live price)
+/* ---------- WebSocket connect & message handlers ---------- */
 function connect(){
   const url = (location.protocol==='https:'?'wss://':'ws://') + window.location.host + '/ws';
   ws = new WebSocket(url);
@@ -536,7 +684,7 @@ function connect(){
 }
 connect();
 
-// search handling (enter)
+/* ---------- search handling ---------- */
 searchEl.addEventListener('keypress', (e)=>{
   if(e.key !== 'Enter') return;
   const raw = searchEl.value.trim();
@@ -548,7 +696,7 @@ searchEl.addEventListener('keypress', (e)=>{
   searchEl.value = '';
 });
 
-// clear pinned
+/* ---------- clear pinned ---------- */
 clearBtn.addEventListener('click', async ()=>{
   const toUnwatch = Array.from(watchedByUser);
   for(const s of toUnwatch){
@@ -559,7 +707,7 @@ clearBtn.addEventListener('click', async ()=>{
   renderTable();
 });
 
-// periodic redraw for sparklines
+/* ---------- periodic redraw for sparklines ---------- */
 setInterval(()=>{
   document.querySelectorAll('#tbody tr').forEach(tr=>{
     const sym = tr.dataset.sym;
@@ -569,6 +717,94 @@ setInterval(()=>{
     if(c) drawSparkline(c, sym);
   });
 }, 1000);
+
+/* ---------- Mobile UI: mirror + open/close ---------- */
+const mobileChatBtn = document.getElementById('mobileChatBtn');
+const mobileOverlay = document.getElementById('mobileOverlay');
+const mobilePanel = document.getElementById('mobileAssistantPanel');
+const mobileClose = document.getElementById('mobileAssistantClose');
+
+function openMobileAssistantFromDesktop(){
+  document.body.classList.add('mobile-assistant-open');
+  const ds = assistantComboInput && assistantComboInput.dataset && assistantComboInput.dataset.binance;
+  if(ds){
+    assistantCombo_mobile_helper.value = assistantComboInput.value || binanceToTicker(ds) + ' (' + ds.toUpperCase() + ')';
+    assistantCombo_mobile_helper.dataset.binance = ds;
+  } else {
+    assistantCombo_mobile_helper.value = assistantComboInput.value || '';
+    assistantCombo_mobile_helper.dataset.binance = '';
+  }
+  assistantLivePrice_mobile.textContent = assistantLivePriceEl ? assistantLivePriceEl.textContent : '$—';
+  mobileOverlay.style.display = 'block';
+  mobilePanel.style.display = 'block';
+}
+
+function openMobileAssistant(){
+  const ds = assistantComboInput && assistantComboInput.dataset && assistantComboInput.dataset.binance;
+  if(ds){
+    assistantCombo_mobile_helper.value = assistantComboInput.value || binanceToTicker(ds) + ' (' + ds.toUpperCase() + ')';
+    assistantCombo_mobile_helper.dataset.binance = ds;
+  } else {
+    assistantCombo_mobile_helper.value = assistantComboInput.value || '';
+    assistantCombo_mobile_helper.dataset.binance = '';
+  }
+  assistantLivePrice_mobile.textContent = assistantLivePriceEl ? assistantLivePriceEl.textContent : '$—';
+  document.body.classList.add('mobile-assistant-open');
+  mobileOverlay.style.display = 'block';
+  mobilePanel.style.display = 'block';
+}
+
+function closeMobileAssistant(){
+  document.body.classList.remove('mobile-assistant-open');
+  mobileOverlay.style.display = 'none';
+  mobilePanel.style.display = 'none';
+}
+
+mobileChatBtn.addEventListener('click', ()=> { openMobileAssistant(); });
+mobileClose.addEventListener('click', closeMobileAssistant);
+mobileOverlay.addEventListener('click', closeMobileAssistant);
+assistantCloseBtn.addEventListener('click', ()=> {
+  const panel = document.getElementById('assistantPanel');
+  if(panel) panel.style.display = 'none';
+  closeMobileAssistant();
+});
+
+/* Mirror analyze action (mobile to desktop) */
+assistantAnalyze_mobileHelper.addEventListener('click', ()=> {
+  const ds = assistantCombo_mobile_helper.dataset.binance || '';
+  if(ds){
+    assistantComboInput.dataset.binance = ds;
+    assistantComboInput.value = assistantCombo_mobile_helper.value || `${ds.toUpperCase()}`;
+  } else {
+    assistantComboInput.value = assistantCombo_mobile_helper.value || '';
+  }
+  assistantAnalyzeBtn.click();
+});
+
+/* Mirror results & price from desktop area */
+const observer = new MutationObserver((mutations) => {
+  try{
+    assistantResultArea_mobile.innerHTML = assistantResultArea.innerHTML;
+    assistantLivePrice_mobile.textContent = assistantLivePriceEl.textContent;
+  }catch(e){}
+});
+observer.observe(assistantResultArea, { childList: true, subtree: true });
+
+const livePriceObserver = new MutationObserver(() => {
+  try { assistantLivePrice_mobile.textContent = assistantLivePriceEl.textContent; } catch(e){}
+});
+if(assistantLivePriceEl) {
+  livePriceObserver.observe(assistantLivePriceEl, { childList: true, subtree: true, characterData: true });
+}
+
+window.addEventListener('resize', ()=> {
+  if(window.innerWidth > 900 && document.body.classList.contains('mobile-assistant-open')){
+    closeMobileAssistant();
+  }
+});
+
+/* initial render */
+renderTable();
 </script>
 </body>
 </html>
