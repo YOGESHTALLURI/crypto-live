@@ -659,6 +659,48 @@ async def mini_ticker_manager():
             await asyncio.sleep(reconnect_delay)
             reconnect_delay = min(reconnect_delay * 1.5, 30)
 
+# REST polling fallback for live prices (use when Binance WS blocked)
+import math
+async def rest_polling_fallback(interval: float = 2.0):
+    """Poll Binance REST API for TOP_SYMBOLS every `interval` seconds.
+       Keeps price_cache populated and broadcasts miniTicker events.
+    """
+    timeout = aiohttp.ClientTimeout(total=6)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        while True:
+            try:
+                tasks = []
+                # group into one REST request per symbol (Binance doesn't support batch price for arbitrary symbols),
+                # but to reduce requests you can call /api/v3/ticker/price for each symbol in a short loop
+                for s in list(TOP_SYMBOLS):
+                    # ensure symbol is uppercase for REST
+                    symbol = s.upper()
+                    url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+                    tasks.append(session.get(url))
+                # execute requests in parallel
+                responses = await asyncio.gather(*tasks, return_exceptions=True)
+                ts = int(time.time() * 1000)
+                for idx, resp in enumerate(responses):
+                    if isinstance(resp, Exception):
+                        continue
+                    try:
+                        async with resp:
+                            if resp.status == 200:
+                                j = await resp.json()
+                                sym = (j.get("symbol") or "").lower()
+                                price = j.get("price")
+                                if sym and price is not None:
+                                    price_cache[sym] = {"price": str(price), "ts": ts}
+                                    # broadcast a miniTicker-like update
+                                    await broadcast({"type":"miniTicker","symbol":sym,"lastPrice": str(price)})
+                    except Exception:
+                        continue
+            except Exception as e:
+                # don't spam logs
+                print("rest polling error:", e)
+            # jitter sleep to avoid sync storms
+            await asyncio.sleep(interval + (0.2 * (math.sin(time.time()) + 1)))
+
 # -------------------------------------------------------------------------
 # HTTP endpoints
 # -------------------------------------------------------------------------
@@ -850,4 +892,7 @@ async def startup_event():
     asyncio.create_task(fetch_24h_stats_periodically(30))
     asyncio.create_task(mini_ticker_manager())
     asyncio.create_task(fetch_coingecko_gold_periodically(5))
-    print("Startup: binance_manager, 24h fetcher, mini_ticker, coingecko started")
+    # start REST fallback alongside mini_ticker_manager
+    asyncio.create_task(rest_polling_fallback(2.0))
+    print("Startup: binance_manager, 24h fetcher, mini_ticker, coingecko, rest fallback started")
+
