@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Trading Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0a0e1a 0%, #1a1f3a 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        h1 {
+            font-size: 3.5em;
+            font-weight: 700;
+            background: linear-gradient(135deg, #06b6d4 0%, #10b981 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 12px;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            color: #94a3b8;
+            font-size: 1.2em;
+            font-weight: 400;
+        }
+
+        .card {
+            background: rgba(21, 27, 43, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(30, 41, 59, 0.5);
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .input-section {
+            margin-bottom: 30px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 12px;
+            color: #94a3b8;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .combo-container {
+            position: relative;
+            display: flex;
+            gap: 12px;
+        }
+
+        .combo-input {
+            flex: 1;
+            padding: 18px 20px;
+            background: rgba(15, 20, 25, 0.8);
+            border: 1px solid #1e293b;
+            border-radius: 12px;
+            color: #e2e8f0;
+            font-size: 1.05em;
+            transition: all 0.3s ease;
+        }
+
+        .combo-input:focus {
+            outline: none;
+            border-color: #06b6d4;
+            box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
+        }
+
+        select {
+            flex: 1;
+            padding: 18px 20px;
+            background: rgba(15, 20, 25, 0.8);
+            border: 1px solid #1e293b;
+            border-radius: 12px;
+            color: #e2e8f0;
+            font-size: 1.05em;
+            cursor: pointer;
+        }
+
+        .analyze-btn {
+            width: 100%;
+            padding: 20px;
+            background: linear-gradient(135deg, #06b6d4 0%, #10b981 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.15em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 6px 25px rgba(6, 182, 212, 0.3);
+        }
+
+        .analyze-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(6, 182, 212, 0.4);
+        }
+
+        .analyze-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 4px solid rgba(6, 182, 212, 0.1);
+            border-top: 4px solid #06b6d4;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results {
+            display: none;
+            animation: fadeIn 0.6s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 25px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid rgba(30, 41, 59, 0.5);
+        }
+
+        .ticker-name {
+            font-size: 2.5em;
+            font-weight: 700;
+            color: #06b6d4;
+        }
+
+        .confidence-badge {
+            background: rgba(6, 182, 212, 0.15);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+            padding: 8px 16px;
+            border-radius: 25px;
+            font-size: 0.95em;
+            font-weight: 600;
+            color: #06b6d4;
+        }
+
+        .decision-container {
+            background: rgba(15, 20, 25, 0.6);
+            border: 2px solid #1e293b;
+            border-radius: 16px;
+            padding: 35px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .decision-label {
+            color: #94a3b8;
+            font-size: 0.9em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 12px;
+        }
+
+        .decision-value {
+            font-size: 3.5em;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .decision-buy { 
+            color: #10b981; 
+            text-shadow: 0 0 40px rgba(16, 185, 129, 0.4);
+        }
+        
+        .decision-sell { 
+            color: #ef4444; 
+            text-shadow: 0 0 40px rgba(239, 68, 68, 0.4);
+        }
+        
+        .decision-hold { 
+            color: #f59e0b; 
+            text-shadow: 0 0 40px rgba(245, 158, 11, 0.4);
+        }
+
+        .hold-notice {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+
+        .hold-notice-title {
+            color: #fbbf24;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .hold-notice-text {
+            color: #cbd5e1;
+            font-size: 0.95em;
+            line-height: 1.6;
+        }
+
+        .price-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .price-card {
+            background: rgba(15, 20, 25, 0.6);
+            border: 1px solid #1e293b;
+            border-radius: 14px;
+            padding: 24px;
+            transition: all 0.3s ease;
+        }
+
+        .price-card:hover {
+            border-color: #06b6d4;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(6, 182, 212, 0.15);
+        }
+
+        .price-label {
+            color: #64748b;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .price-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #e2e8f0;
+            font-family: 'Courier New', monospace;
+        }
+
+        .price-na {
+            color: #64748b;
+            font-style: italic;
+        }
+
+        .live-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .potential-setups {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .setup-card {
+            border-radius: 14px;
+            padding: 24px;
+            border: 1px solid;
+        }
+
+        .setup-buy {
+            background: rgba(16, 185, 129, 0.05);
+            border-color: rgba(16, 185, 129, 0.2);
+        }
+
+        .setup-sell {
+            background: rgba(239, 68, 68, 0.05);
+            border-color: rgba(239, 68, 68, 0.2);
+        }
+
+        .setup-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 18px;
+            font-size: 1.1em;
+            font-weight: 600;
+        }
+
+        .setup-buy .setup-header { color: #10b981; }
+        .setup-sell .setup-header { color: #ef4444; }
+
+        .setup-details {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .setup-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.95em;
+        }
+
+        .setup-row-label {
+            color: #94a3b8;
+        }
+
+        .setup-row-value {
+            color: #e2e8f0;
+            font-weight: 600;
+            font-family: 'Courier New', monospace;
+        }
+
+        .trend-section {
+            background: rgba(15, 20, 25, 0.6);
+            border: 1px solid #1e293b;
+            border-radius: 14px;
+            padding: 24px;
+            margin-bottom: 30px;
+        }
+
+        .trend-label {
+            color: #94a3b8;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 16px;
+        }
+
+        .trend-grid {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+
+        .trend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .trend-icon {
+            font-size: 1.3em;
+        }
+
+        .trend-text {
+            font-size: 0.95em;
+        }
+
+        .trend-timeframe {
+            color: #94a3b8;
+            font-weight: 500;
+        }
+
+        .trend-direction {
+            color: #e2e8f0;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+
+        .rationale-section {
+            background: rgba(15, 20, 25, 0.6);
+            border: 1px solid #1e293b;
+            border-radius: 14px;
+            padding: 28px;
+        }
+
+        .rationale-label {
+            color: #94a3b8;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .rationale-text {
+            color: #cbd5e1;
+            line-height: 1.8;
+            font-size: 1.05em;
+        }
+
+        .debug-section {
+            margin-top: 30px;
+            background: rgba(15, 20, 25, 0.4);
+            border: 1px solid rgba(30, 41, 59, 0.3);
+            border-radius: 14px;
+            padding: 20px;
+        }
+
+        .debug-toggle {
+            cursor: pointer;
+            color: #94a3b8;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            user-select: none;
+        }
+
+        .debug-content {
+            display: none;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(30, 41, 59, 0.3);
+        }
+
+        .debug-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .debug-item {
+            font-size: 0.9em;
+        }
+
+        .debug-item-label {
+            color: #64748b;
+            font-size: 0.85em;
+            margin-bottom: 4px;
+        }
+
+        .debug-item-value {
+            color: #cbd5e1;
+            font-family: 'Courier New', monospace;
+        }
+
+        .error {
+            display: none;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+
+        .error-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 2.2em; }
+            .card { padding: 25px; }
+            .price-grid { grid-template-columns: 1fr; }
+            .decision-value { font-size: 2.5em; }
+            .potential-setups { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Crypto Intraday Trading Assistant</h1>
+            <p class="subtitle">AI-powered buy/hold/sell recommendations with live prices</p>
+        </header>
+
+        <div class="card">
+            <div class="input-section">
+                <label>Select or Search Cryptocurrency/Commodity</label>
+                <div class="combo-container">
+                    <select id="crypto-select" onchange="selectAsset()">
+                        <option value="">-- Select Asset --</option>
+                        <option value="BTC/USD">Bitcoin (BTC/USD)</option>
+                        <option value="ETH/USD">Ethereum (ETH/USD)</option>
+                        <option value="BNB/USD">Binance Coin (BNB/USD)</option>
+                        <option value="XRP/USD">Ripple (XRP/USD)</option>
+                        <option value="ADA/USD">Cardano (ADA/USD)</option>
+                        <option value="DOGE/USD">Dogecoin (DOGE/USD)</option>
+                        <option value="SOL/USD">Solana (SOL/USD)</option>
+                        <option value="DOT/USD">Polkadot (DOT/USD)</option>
+                        <option value="MATIC/USD">Polygon (MATIC/USD)</option>
+                        <option value="AVAX/USD">Avalanche (AVAX/USD)</option>
+                        <option value="LINK/USD">Chainlink (LINK/USD)</option>
+                        <option value="UNI/USD">Uniswap (UNI/USD)</option>
+                        <option value="LTC/USD">Litecoin (LTC/USD)</option>
+                        <option value="ATOM/USD">Cosmos (ATOM/USD)</option>
+                        <option value="XLM/USD">Stellar (XLM/USD)</option>
+                        <option value="XAU/USD">Gold (XAU/USD)</option>
+                        <option value="GOLD/USD">Gold (GOLD/USD)</option>
+                    </select>
+                </div>
+            </div>
+
+            <button class="analyze-btn" id="analyze-btn" onclick="analyzeCrypto()">
+                Analyze Market
+            </button>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <div style="color: #94a3b8; font-size: 1.1em;">Analyzing market data...</div>
+            </div>
+
+            <div class="error" id="error">
+                <div class="error-title">⚠️ Analysis Failed</div>
+                <div id="error-message"></div>
+            </div>
+        </div>
+
+        <div class="results" id="results"></div>
+    </div>
+
+    <script>
+        let selectedAsset = null;
+
+        function selectAsset() {
+            const select = document.getElementById('crypto-select');
+            selectedAsset = select.value;
+        }
+
+        async function analyzeCrypto() {
+            if (!selectedAsset) {
+                alert('Please select a cryptocurrency/commodity first!');
+                return;
+            }
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('analyze-btn').disabled = true;
+
+            try {
+                const response = await fetch('https://syndney123.app.n8n.cloud/webhook/c036aabf-edb7-4dfc-a86c-a82ae43cbbba', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticker: selectedAsset })
+                });
+
+                if (!response.ok) throw new Error('Network response was not ok');
+
+                const data = await response.json();
+                const analysis = Array.isArray(data) ? data[0] : data;
+                displayResults(analysis);
+            } catch (error) {
+                showError('Unable to connect to the analysis service. Please try again later.');
+                console.error('Error:', error);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('analyze-btn').disabled = false;
+            }
+        }
+
+        function displayResults(analysis) {
+            const resultsDiv = document.getElementById('results');
+            const assetName = analysis.ticker?.replace('USDT', '') || selectedAsset.split('/')[0];
+            
+            let decisionClass = 'decision-hold';
+            if (analysis.decision?.toLowerCase() === 'buy') decisionClass = 'decision-buy';
+            else if (analysis.decision?.toLowerCase() === 'sell') decisionClass = 'decision-sell';
+            
+            const isHold = analysis.decision?.toLowerCase() === 'hold';
+            const hasDebug = analysis.debug && analysis.debug.potentialBuySetup;
+            
+            const formatPrice = (price) => {
+                if (!price || price === 0) return 'N/A';
+                return '$' + Number(price).toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+            };
+
+            const getTrendIcon = (trend) => {
+                if (trend === 'bullish') return '📈';
+                if (trend === 'bearish') return '📉';
+                return '➡️';
+            };
+            
+            let html = `
+                <div class="card">
+                    <div class="result-header">
+                        <div class="ticker-name">${assetName}</div>
+                      
+
+
+
+<div class="confidence-badge">
+    Confidence: ${analysis.confidence > 1 ? analysis.confidence.toFixed(0) : (analysis.confidence * 100).toFixed(0)}%
+</div>
+                    </div>
+                    
+                    <div class="decision-container">
+                        <div class="decision-label">Trading Decision</div>
+                        <div class="decision-value ${decisionClass}">
+                            ${(analysis.decision || 'HOLD').toUpperCase()}
+                        </div>
+                    </div>
+            `;
+
+            if (isHold && hasDebug) {
+                html += `
+                    <div class="hold-notice">
+                        <div class="hold-notice-title">💡 No Clear Trade Setup</div>
+                        <div class="hold-notice-text">
+                            Market conditions don't meet entry criteria. See potential setups below for reference.
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += `
+                    <div class="price-grid">
+                        <div class="price-card">
+                            <div class="price-label">
+                                <span class="live-indicator"></span>
+                                Current Price
+                            </div>
+                            <div class="price-value">${formatPrice(analysis.currentPrice)}</div>
+                        </div>
+                        <div class="price-card">
+                            <div class="price-label">Entry Price</div>
+                            <div class="price-value">${formatPrice(analysis.buyPrice)}</div>
+                        </div>
+                        <div class="price-card">
+                            <div class="price-label">Stop Loss</div>
+                            <div class="price-value ${analysis.stopLoss > 0 ? '' : 'price-na'}">
+                                ${formatPrice(analysis.stopLoss)}
+                            </div>
+                        </div>
+                        <div class="price-card">
+                            <div class="price-label">Target Exit</div>
+                            <div class="price-value ${analysis.targetExit > 0 ? '' : 'price-na'}">
+                                ${formatPrice(analysis.targetExit)}
+                            </div>
+                        </div>
+            `;
+
+            if (analysis.riskRewardRatio > 0) {
+                html += `
+                      <div class="price-card">
+    <div class="price-label">Risk/Reward</div>
+    <div class="price-value">
+        ${analysis.riskRewardRatioFormatted || `1:${analysis.riskRewardRatio}`}
+    </div>
+</div>
+                `;
+            }
+
+            html += `</div>`;
+
+            if (isHold && hasDebug) {
+                html += `
+                    <div class="potential-setups">
+                        <div class="setup-card setup-buy">
+                            <div class="setup-header">
+                                📈 Potential BUY Setup
+                            </div>
+                            <div class="setup-details">
+                                <div class="setup-row">
+                                    <span class="setup-row-label">Stop Loss:</span>
+                                    <span class="setup-row-value">${formatPrice(analysis.debug.potentialBuySetup.stopLoss)}</span>
+                                </div>
+                                <div class="setup-row">
+                                    <span class="setup-row-label">Target:</span>
+                                    <span class="setup-row-value">${formatPrice(analysis.debug.potentialBuySetup.target)}</span>
+                                </div>
+                                <div class="setup-row">
+                                    <span class="setup-row-label">R:R Ratio:</span>
+                                    <span class="setup-row-value">${analysis.debug.potentialBuySetup.riskReward}:1</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="setup-card setup-sell">
+                            <div class="setup-header">
+                                📉 Potential SELL Setup
+                            </div>
+                            <div class="setup-details">
+                                <div class="setup-row">
+                                    <span class="setup-row-label">Stop Loss:</span>
+                                    <span class="setup-row-value">${formatPrice(analysis.debug.potentialSellSetup.stopLoss)}</span>
+                                </div>
+                                <div class="setup-row">
+                                    <span class="setup-row-label">Target:</span>
+                                    <span class="setup-row-value">${formatPrice(analysis.debug.potentialSellSetup.target)}</span>
+                                </div>
+                                <div class="setup-row">
+                                    <span class="setup-row-label">R:R Ratio:</span>
+                                    <span class="setup-row-value">${analysis.debug.potentialSellSetup.riskReward}:1</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (analysis.trendAlignment) {
+                html += `
+                    <div class="trend-section">
+                        <div class="trend-label">Trend Alignment</div>
+                        <div class="trend-grid">
+                            <div class="trend-item">
+                                <span class="trend-icon">${getTrendIcon(analysis.trendAlignment.daily)}</span>
+                                <span class="trend-text">
+                                    <span class="trend-timeframe">Daily:</span>
+                                    <span class="trend-direction">${analysis.trendAlignment.daily}</span>
+                                </span>
+                            </div>
+                            <div class="trend-item">
+                                <span class="trend-icon">${getTrendIcon(analysis.trendAlignment['4hour'])}</span>
+                                <span class="trend-text">
+                                    <span class="trend-timeframe">4H:</span>
+                                    <span class="trend-direction">${analysis.trendAlignment['4hour']}</span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += `
+                    <div class="rationale-section">
+                        <div class="rationale-label">
+                            📊 Analysis Rationale
+                        </div>
+                        <div class="rationale-text">${analysis.rationale || 'No analysis provided'}</div>
+                    </div>
+            `;
+
+            if (analysis.debug) {
+                html += `
+                    <div class="debug-section">
+                        <div class="debug-toggle" onclick="toggleDebug()">
+                            ⚙️ Technical Details (Click to expand)
+                        </div>
+                        <div class="debug-content" id="debug-content">
+                            <div class="debug-grid">
+                                <div class="debug-item">
+                                    <div class="debug-item-label">ATR (15m)</div>
+                                    <div class="debug-item-value">$${analysis.debug.atr15m?.toFixed(2) || 'N/A'}</div>
+                                </div>
+                                <div class="debug-item">
+                                    <div class="debug-item-label">Stop Distance</div>
+                                    <div class="debug-item-value">${analysis.debug.stopDistancePercent || 'N/A'}</div>
+                                </div>
+                `;
+
+                if (analysis.debug.indicators) {
+                    html += `
+                                <div class="debug-item">
+                                    <div class="debug-item-label">15m RSI</div>
+                                    <div class="debug-item-value">${analysis.debug.indicators['15m_RSI']?.toFixed(2) || 'N/A'}</div>
+                                </div>
+                                <div class="debug-item">
+                                    <div class="debug-item-label">4H RSI</div>
+                                    <div class="debug-item-value">${analysis.debug.indicators['4h_RSI']?.toFixed(2) || 'N/A'}</div>
+                                </div>
+                                <div class="debug-item">
+                                    <div class="debug-item-label">15m Trend</div>
+                                    <div class="debug-item-value">${analysis.debug.indicators['15m_Trend'] || 'N/A'}</div>
+                                </div>
+                                <div class="debug-item">
+                                    <div class="debug-item-label">4H Trend</div>
+                                    <div class="debug-item-value">${analysis.debug.indicators['4h_Trend'] || 'N/A'}</div>
+                                </div>
+                    `;
+                }
+
+                html += `
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += `</div>`;
+            
+            resultsDiv.innerHTML = html;
+            resultsDiv.style.display = 'block';
+        }
+
+        function toggleDebug() {
+            const debugContent = document.getElementById('debug-content');
+            debugContent.style.display = debugContent.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            document.getElementById('error-message').textContent = message;
+            errorDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
