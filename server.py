@@ -535,40 +535,96 @@ async def fetch_coingecko_gold_periodically(interval: int = 5):
 # Binance managers
 # -------------------------------------------------------------------------
 async def binance_manager():
+    """
+    Manages the combined stream WebSocket connection with robust failover.
+    Attempts multiple endpoints to handle geo-blocking (e.g. US servers).
+    """
     reconnect_delay = 1.0
     ws_conn = None
     active_snapshot = set()
 
+    # List of endpoints to try in order.
+    # 1. Global (fastest, but blocked in US)
+    # 2. Vision (Public data stream, often less restricted)
+    # 3. US (For US servers like Render)
+    ENDPOINTS = [
+        "wss://stream.binance.com:9443/stream?streams=",
+        "wss://data-stream.binance.vision/stream?streams=", 
+        "wss://stream.binance.us:9443/stream?streams="
+    ]
+    
+    current_endpoint_idx = 0
     _symbols_changed.set()
+
     while True:
+        # Wait for symbol changes
         await _symbols_changed.wait()
         _symbols_changed.clear()
         await asyncio.sleep(0.5)
 
         async with _subscribe_lock:
             wanted = set(TOP_SYMBOLS) | set(dynamic_watches)
-        if not wanted:
+        
+        # Filter out non-crypto (like gold/xauusd which is handled by coingecko) for Binance streams
+        wanted_binance = {s for s in wanted if s != 'xauusd'}
+        
+        if not wanted_binance:
             await asyncio.sleep(1.0)
             continue
 
-        if wanted == active_snapshot and ws_conn:
+        # Close existing if needed
+        if wanted_binance != active_snapshot and ws_conn:
+            try:
+                await ws_conn.close()
+            except Exception:
+                pass
+            ws_conn = None
+            active_snapshot = set()
+
+        if ws_conn:
+            # Already connected and snapshot matches
             pass
         else:
-            if ws_conn:
+            # Try to connect using endpoints list
+            connected = False
+            
+            # Construct the stream part
+            parts = []
+            for s in sorted(list(wanted_binance)):
+                 parts.append(f"{s}@trade")
+                 parts.append(f"{s}@kline_1m")
+                 parts.append(f"{s}@bookTicker")
+            stream_query = "/".join(parts)
+
+            for i in range(len(ENDPOINTS)):
+                # If we have failed recently on an endpoint, we might cycle to next
+                idx = (current_endpoint_idx + i) % len(ENDPOINTS)
+                base_url = ENDPOINTS[idx]
+                url = base_url + stream_query
+                
+                print(f"Connecting to Binance ({base_url}) for {len(wanted_binance)} symbols...")
                 try:
-                    await ws_conn.close()
-                except Exception:
-                    pass
-                ws_conn = None
-                active_snapshot = set()
+                    ws_conn = await websockets.connect(url, ping_interval=20, ping_timeout=10)
+                    print(f"Connected to {base_url}")
+                    current_endpoint_idx = idx # Remember working endpoint
+                    connected = True
+                    break
+                except Exception as e:
+                    print(f"Failed to connect to {base_url}: {e}")
+                    ws_conn = None
+            
+            if not connected:
+                print("All Binance WebSocket endpoints failed. Will retry in 5s. (Backing off)")
+                # If all fail, likely a strict firewall or network issue. 
+                # We can't do much but wait or rely on REST fallback (if running).
+                await asyncio.sleep(5.0)
+                _symbols_changed.set() # Trigger retry
+                continue
 
-        url = build_stream_url(list(wanted))
-        try:
-            print("Connecting to Binance combined stream for:", sorted(wanted)[:8], "...")
-            ws_conn = await websockets.connect(url, ping_interval=20, ping_timeout=10)
             reconnect_delay = 1.0
-            active_snapshot = set(wanted)
+            active_snapshot = set(wanted_binance)
 
+            # --- Listen Loop ---
             while True:
                 if _symbols_changed.is_set():
                     print("Symbols changed -> reconnecting combined stream")
@@ -576,9 +632,15 @@ async def binance_manager():
                 try:
                     msg = await asyncio.wait_for(ws_conn.recv(), timeout=30)
                 except asyncio.TimeoutError:
-                    continue
+                    # Ping timeout logic handled by websockets lib mostly, but if silent for 30s...
+                    print("No data received for 30s, reconnecting...")
+                    break
                 except websockets.ConnectionClosed as e:
-                    print("binance closed:", e)
+                    print(f"Binance closed connection ({e.code}): {e.reason}")
+                    # If 451, switch endpoint immediately
+                    if "451" in str(e) or "403" in str(e):
+                        print("Geo-block detected (451/403). Switching endpoint strategy.")
+                        current_endpoint_idx = (current_endpoint_idx + 1) % len(ENDPOINTS)
                     break
                 except Exception as e:
                     print("recv error:", e)
@@ -617,47 +679,77 @@ async def binance_manager():
                 except Exception as e:
                     print("parse error:", e)
                     continue
-        except Exception as e:
-            print("connect error:", e)
-            await asyncio.sleep(reconnect_delay)
-            reconnect_delay = min(reconnect_delay * 1.5, 30)
-            continue
+
 
 async def mini_ticker_manager():
+    """
+    Manages the miniTicker stream.
+    Supports failover to US/Vision endpoints for US-based servers.
+    """
     reconnect_delay = 1.0
+    
+    # Endpoints to try
+    MINI_ENDPOINTS = [
+        "wss://stream.binance.com:9443/ws/!miniTicker@arr",
+        "wss://data-stream.binance.vision/ws/!miniTicker@arr",
+        "wss://stream.binance.us:9443/ws/!miniTicker@arr"  # Note: US tickers might differ slightly but usually compatible
+    ]
+    
+    current_idx = 0
+
     while True:
-        try:
-            print("Connecting to Binance miniTicker stream...")
-            async with websockets.connect(BINANCE_MINI, ping_interval=20, ping_timeout=10) as ws:
-                print("Connected to miniTicker stream.")
+        # Try to connect
+        ws = None
+        for i in range(len(MINI_ENDPOINTS)):
+            idx = (current_idx + i) % len(MINI_ENDPOINTS)
+            url = MINI_ENDPOINTS[idx]
+            print(f"Connecting to miniTicker at {url}...")
+            try:
+                ws = await websockets.connect(url, ping_interval=20, ping_timeout=10)
+                print(f"Connected to miniTicker at {url}")
+                current_idx = idx
                 reconnect_delay = 1.0
-                async for msg in ws:
-                    try:
-                        obj = json.loads(msg)
-                    except Exception:
+                break
+            except Exception as e:
+                print(f"MiniTicker connect failed for {url}: {e}")
+        
+        if not ws:
+            print("All miniTicker endpoints failed. Retry in 5s.")
+            await asyncio.sleep(5.0)
+            continue
+
+        try:
+            async for msg in ws:
+                try:
+                    obj = json.loads(msg)
+                except Exception:
+                    continue
+
+                items = []
+                if isinstance(obj, dict) and 'data' in obj:
+                    data = obj['data']
+                    items = data if isinstance(data, list) else [data]
+                elif isinstance(obj, list):
+                    items = obj
+                elif isinstance(obj, dict):
+                    items = [obj]
+
+                for entry in items:
+                    s = entry.get('s') or entry.get('symbol') or entry.get('S')
+                    if not s:
                         continue
-
-                    items = []
-                    if isinstance(obj, dict) and 'data' in obj:
-                        data = obj['data']
-                        items = data if isinstance(data, list) else [data]
-                    elif isinstance(obj, list):
-                        items = obj
-                    elif isinstance(obj, dict):
-                        items = [obj]
-
-                    for entry in items:
-                        s = entry.get('s') or entry.get('symbol') or entry.get('S')
-                        if not s:
-                            continue
-                        symbol = s.lower()
-                        last = entry.get('c') or entry.get('close') or entry.get('lastPrice')
-                        price_cache[symbol] = {"price": last, "ts": int(time.time()*1000)}
-                        await broadcast({"type":"miniTicker","symbol":symbol,"lastPrice": last})
+                    symbol = s.lower()
+                    last = entry.get('c') or entry.get('close') or entry.get('lastPrice')
+                    price_cache[symbol] = {"price": last, "ts": int(time.time()*1000)}
+                    await broadcast({"type":"miniTicker","symbol":symbol,"lastPrice": last})
         except Exception as e:
-            print("miniTicker connection error:", e)
+            print(f"miniTicker connection lost: {e}")
+            if "451" in str(e) or "403" in str(e):
+                 print("Geo-block likely. Rotating endpoint.")
+                 current_idx = (current_idx + 1) % len(MINI_ENDPOINTS)
             await asyncio.sleep(reconnect_delay)
             reconnect_delay = min(reconnect_delay * 1.5, 30)
+
 
 # REST polling fallback for live prices (use when Binance WS blocked)
 import math
