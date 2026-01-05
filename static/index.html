@@ -134,10 +134,15 @@
     /* -------------------------------------------------------------------------
    MAIN LAYOUT (Left Table / Right Assistant)
 ------------------------------------------------------------------------- */
+
+    /* -------------------------------------------------------------------------
+   MAIN LAYOUT (Left Table / Right Assistant)
+------------------------------------------------------------------------- */
     .page {
       display: flex;
       gap: 24px;
       align-items: stretch;
+      /* Default Desktop Layout */
     }
 
     .left {
@@ -150,6 +155,115 @@
       width: 440px;
       flex-shrink: 0;
       position: relative;
+    }
+
+    /* Mobile Tabs (Hidden on Desktop) */
+    .mobile-tabs {
+      display: none;
+    }
+
+    /* -------------------------------------------------------------------------
+   RESPONSIVE / MOBILE LAYOUT
+------------------------------------------------------------------------- */
+    @media (max-width: 900px) {
+      .page {
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .left,
+      .right {
+        width: 100%;
+        max-width: 100%;
+      }
+
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .search-wrapper {
+        width: 100%;
+      }
+
+      input[type="search"] {
+        width: 100%;
+      }
+
+      /* TAB NAVIGATION FOR MOBILE */
+      .mobile-tabs {
+        display: flex;
+        background: #1e293b;
+        padding: 4px;
+        border-radius: 12px;
+        margin-bottom: 16px;
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+      }
+
+      .mobile-tab-btn {
+        flex: 1;
+        padding: 12px;
+        background: transparent;
+        border: none;
+        color: #94a3b8;
+        font-weight: 600;
+        cursor: pointer;
+        border-radius: 8px;
+        transition: all 0.2s;
+      }
+
+      .mobile-tab-btn.active {
+        background: #0f172a;
+        color: #06b6d4;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      }
+
+      /* Visibility Management based on Active Tab */
+      .page.tab-market .right {
+        display: none;
+      }
+
+      .page.tab-assistant .left {
+        display: none;
+      }
+    }
+
+    /* Table Responsiveness */
+    .tableWrap {
+      width: 100%;
+      overflow-x: auto;
+      /* Allow horizontal scroll ONLY for table if needed */
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      min-width: 600px;
+      /* Ensure table keeps structure */
+    }
+
+    /* Hide less critical columns on very small screens to fit width if possible */
+    @media (max-width: 500px) {
+
+      .th-spark,
+      .td-spark,
+      .th-trend,
+      .td-trend {
+        display: none;
+        /* Hide Sparkline and Trend on Phone Portrait */
+      }
+
+      table {
+        min-width: 100%;
+        /* Allow table to shrink */
+      }
+
+      td,
+      th {
+        padding: 12px 10px;
+      }
     }
 
     /* -------------------------------------------------------------------------
@@ -839,18 +953,25 @@
 
 <body>
 
+
   <div class="header">
-    <div>
+    <div style="flex:1">
       <div class="h1">Live Crypto Market</div>
       <div class="hint">Real-time prices via Binance. Select any coin to analyze with AI.</div>
     </div>
     <div class="search-wrap">
-      <input id="search" type="search" placeholder="Search for coin" />
+      <input type="search" id="search" placeholder="Search for coin" />
     </div>
   </div>
 
-  <div class="page">
-    <!-- LEFT: Table -->
+  <!-- Mobile Tabs -->
+  <div class="mobile-tabs">
+    <button class="mobile-tab-btn active" data-tab="market">Market Data</button>
+    <button class="mobile-tab-btn" data-tab="assistant">AI Assistant</button>
+  </div>
+
+  <div class="page tab-market">
+    <!-- Left: Table -->
     <div class="left">
       <div class="tableWrap">
         <table>
@@ -858,15 +979,12 @@
             <tr>
               <th>Asset</th>
               <th>Price</th>
-              <th>Trend (1m)</th>
+              <th class="th-trend">Trend (1m)</th>
+              <th class="th-spark">Graph</th>
               <th>Action</th>
             </tr>
           </thead>
-          <tbody id="tbody">
-            <tr>
-              <td colspan="4" class="notice">Connecting...</td>
-            </tr>
-          </tbody>
+          <tbody id="tbody"></tbody>
         </table>
       </div>
     </div>
@@ -1163,11 +1281,26 @@
 
     // Select from table logic
     function selectForAssistant(sym) {
+      // 1. Auto-switch to Assistant Tab on Mobile
+      if (window.innerWidth <= 900) {
+        switchTab('assistant');
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
       const ticker = binanceToTicker(sym);
-      // Try to find in dropdown
+      normalizeSym(sym); // just in case
+
+      // 2. Sync Custom Dropdown
+      const sel = document.querySelector('#crypto-select');
+      const customTrigger = document.querySelector('.custom-select-trigger');
+      const customOptions = document.querySelectorAll('.custom-option');
+
+      // Check if exists
       let found = false;
       let foundText = "";
 
+      // Try dropdown native options
       for (let i = 0; i < sel.options.length; i++) {
         if (sel.options[i].value === ticker) {
           sel.selectedIndex = i;
@@ -1176,44 +1309,39 @@
           break;
         }
       }
-      // If not found, add temp option
-      if (!found) {
+
+      // Sync Custom UI
+      if (found) {
+        customOptions.forEach(o => {
+          o.classList.remove('selected');
+          if (o.dataset.value === ticker) {
+            o.classList.add('selected');
+            foundText = o.textContent; // Prefer custom text
+          }
+        });
+        customTrigger.querySelector('span').textContent = foundText;
+        sel.value = ticker; // Ensure native value set
+      } else {
+        // Create temporary option if not found
         const opt = document.createElement('option');
         opt.value = ticker;
-        opt.text = ticker + ' (Custom)';
-        // Add to native
+        opt.text = sym.toUpperCase() + ' (Selected)';
         sel.add(opt);
         sel.value = ticker;
-        foundText = opt.text;
 
-        // Add to custom UI
-        const div = document.createElement('div');
-        div.className = 'custom-option';
-        div.textContent = opt.text;
-        div.dataset.value = opt.value;
-        div.addEventListener('click', function () {
-          sel.value = this.dataset.value;
-          customTrigger.querySelector('span').textContent = this.textContent;
-          document.querySelectorAll('.custom-option').forEach(o => o.classList.remove('selected'));
-          this.classList.add('selected');
-          customSelect.classList.remove('open');
-        });
-        customOptions.appendChild(div);
+        customTrigger.querySelector('span').textContent = opt.text;
+        // We don't necessarily add it to custom list to keep it clean, or we could.
       }
 
-      // Sync Custom UI (Text)
-      customTrigger.querySelector('span').textContent = foundText;
-      document.querySelectorAll('.custom-option').forEach(o => {
-        o.classList.remove('selected');
-        if (o.dataset.value === ticker) o.classList.add('selected');
-      });
-
-      // Trigger highlight
+      // 3. Highlight Table Row
       const tr = document.querySelector(`tr[data-sym="${sym}"]`);
       if (tr) {
-        tr.classList.remove('row-highlight');
-        void tr.offsetWidth;
+        document.querySelectorAll('tr').forEach(r => r.classList.remove('row-highlight'));
+        // void tr.offsetWidth; // reset anim
         tr.classList.add('row-highlight');
+        if (window.innerWidth > 900) {
+          tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
       }
     }
 
@@ -1465,6 +1593,32 @@
       d.style.display = (d.style.display === 'block') ? 'none' : 'block';
     }
 
+
+    // Mobile Tabs Logic
+    const tabBtns = document.querySelectorAll('.mobile-tab-btn');
+    const pageContainer = document.querySelector('.page');
+
+    function switchTab(tabName) {
+      // Update Buttons
+      tabBtns.forEach(btn => {
+        if (btn.dataset.tab === tabName) btn.classList.add('active');
+        else btn.classList.remove('active');
+      });
+
+      // Update View
+      pageContainer.classList.remove('tab-market', 'tab-assistant');
+      pageContainer.classList.add(`tab-${tabName}`);
+
+      // Scroll to top
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        switchTab(btn.dataset.tab);
+      });
+    });
+
     // Search
     document.getElementById('search').addEventListener('keypress', e => {
       if (e.key === 'Enter') {
@@ -1479,6 +1633,7 @@
         }
       }
     });
+
 
   </script>
 </body>
