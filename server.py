@@ -411,11 +411,21 @@ import aiohttp
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 # -------------------------------------------------------------------------
 # FastAPI + static files
 # -------------------------------------------------------------------------
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # -------------------------------------------------------------------------
@@ -445,7 +455,7 @@ BINANCE_24H = "https://api.binance.com/api/v3/ticker/24hr"
 BINANCE_MINI = "wss://stream.binance.com:9443/ws/!miniTicker@arr"
 
 # Replace this with your n8n webhook
-N8N_WEBHOOK = "https://syndney123.app.n8n.cloud/webhook/c036aabf-edb7-4dfc-a86c-a82ae43cbbba"
+N8N_WEBHOOK = "https://shabirali123.app.n8n.cloud/webhook/c036aabf-edb7-4dfc-a86c-a82ae43cbbba"
 
 # -------------------------------------------------------------------------
 # Utilities
@@ -899,7 +909,9 @@ async def analyze(req: Request):
         base = b_lower.replace('usdt', '').upper()
         return f"{base}/USD"
     
-    ticker = binanceToTickerServer(bin_sym)
+    ticker = body.get("ticker")
+    if not ticker:
+        ticker = binanceToTickerServer(bin_sym)
 
     payload = {"ticker": ticker}
 
