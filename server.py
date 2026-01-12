@@ -455,7 +455,7 @@ BINANCE_24H = "https://api.binance.com/api/v3/ticker/24hr"
 BINANCE_MINI = "wss://stream.binance.com:9443/ws/!miniTicker@arr"
 
 # Replace this with your n8n webhook
-N8N_WEBHOOK = "https://shabirali123.app.n8n.cloud/webhook/c036aabf-edb7-4dfc-a86c-a82ae43cbbba"
+N8N_WEBHOOK = "https://pavanking.app.n8n.cloud/webhook/c036aabf-edb7-4dfc-a86c-a82ae43cbbba"
 
 # -------------------------------------------------------------------------
 # Utilities
